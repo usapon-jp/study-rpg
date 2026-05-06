@@ -16,6 +16,30 @@ def crop(source, name, box, transparent=False, tolerance=34):
     piece.save(OUT / name)
 
 
+def crop_soft_scene(source, name, box):
+    image = Image.open(GEN / source).convert("RGBA")
+    piece = image.crop(box)
+    piece = soften_scene_edges(piece)
+    piece.save(OUT / name)
+
+
+def soften_scene_edges(image):
+    """Fade the reference-scene crop edges so the full-body sprite blends in."""
+    image = image.convert("RGBA")
+    pixels = image.load()
+    width, height = image.size
+    fade = 18
+
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = pixels[x, y]
+            edge_distance = min(x, y, width - 1 - x, height - 1 - y)
+            if edge_distance < fade:
+                alpha = int(a * max(0, edge_distance / fade))
+                pixels[x, y] = (r, g, b, alpha)
+    return image
+
+
 def remove_paper(image, tolerance=34):
     image = image.convert("RGBA")
     pixels = image.load()
@@ -76,7 +100,7 @@ def main():
     # Core asset sheet: 1536x1024.
     crop("core-asset-sheet.png", "home-bg.png", (10, 10, 840, 535))
     crop("core-asset-sheet.png", "protagonist.png", (870, 10, 1132, 535), True, 46)
-    crop("core-asset-sheet.png", "leefel.png", (1164, 28, 1320, 226), True, 48)
+    crop_soft_scene("ui-home-reference.png", "leefel.png", (838, 426, 1035, 686))
     crop("core-asset-sheet.png", "leefel-cheer.png", (1326, 28, 1514, 226), True, 48)
     crop("core-asset-sheet.png", "leefel-hint.png", (1164, 260, 1320, 500), True, 48)
     crop("core-asset-sheet.png", "leefel-worry.png", (1326, 260, 1514, 500), True, 48)

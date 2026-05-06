@@ -12,12 +12,22 @@ import {
 import { loadState, saveState } from "./storage";
 
 const rarityWeight = { N: 70, R: 25, SR: 5 };
+const subjectOptions = ["数学", "英語", "理科", "社会", "国語"];
+const purposeOptions = ["ワーク確認", "丸つけ後の復習", "苦手分析", "テスト対策", "暗記チェック"];
 
 function daysUntil(dateValue) {
   const today = new Date();
   const test = new Date(`${dateValue}T00:00:00`);
   if (Number.isNaN(test.getTime())) return 0;
   return Math.max(0, Math.ceil((test - today) / 86400000));
+}
+
+function todayString() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function clampPercent(value) {
@@ -69,6 +79,8 @@ export default function App() {
   const [gachaResults, setGachaResults] = useState([]);
   const [roomOpen, setRoomOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [resultOpen, setResultOpen] = useState(false);
+  const [scanDraft, setScanDraft] = useState(null);
   const [progressMode, setProgressMode] = useState("week");
   const [sparkle, setSparkle] = useState(false);
 
@@ -300,6 +312,8 @@ export default function App() {
         timer: { running: false, elapsedSeconds: 0 },
       };
     });
+    setScanDraft(createScanDraft(state));
+    setResultOpen(true);
     setToast("タイマーの分を今日の勉強時間に足したよ");
   }
 
@@ -313,6 +327,105 @@ export default function App() {
       avatar: { ...current.avatar, profileIcon: icon },
     }));
     setAvatarOpen(false);
+  }
+
+  function updateScanDraft(patch) {
+    setScanDraft((current) => ({ ...(current || createScanDraft(state)), ...patch }));
+  }
+
+  function updateScanFiles(fileList) {
+    const files = Array.from(fileList || []).map((file) => ({
+      name: file.name,
+      type: file.type || "unknown",
+      size: file.size,
+      source: "upload",
+    }));
+    updateScanDraft({ files });
+  }
+
+  function saveScanResult() {
+    const draft = scanDraft || createScanDraft(state);
+    if (draft.saved) {
+      setToast("この成果はもう保存済みだよ");
+      return;
+    }
+    const minutes = Math.max(5, Number(draft.studyMinutes || 0));
+    const xp = Math.max(10, Math.round(minutes * 0.8));
+    const coin = Math.max(8, Math.round(minutes * 0.55));
+    const generated = {
+      date: todayString(),
+      studyMinutes: minutes,
+      completedQuests: [
+        {
+          subject: draft.subject,
+          title: `${draft.subject} ${draft.purpose}`,
+          xp,
+          coin,
+          evidence: {
+            driveUrl: draft.driveUrl,
+            files: draft.files,
+            memo: draft.memo,
+          },
+        },
+      ],
+      recoveryQuests: draft.weakPoint
+        ? [
+            {
+              subject: draft.subject,
+              title: `${draft.weakPoint} リカバリー`,
+              xp: 35,
+              coin: 25,
+            },
+          ]
+        : [],
+      rewards: { xp, coin },
+      aiAnalysisRequest: {
+        subject: draft.subject,
+        purpose: draft.purpose,
+        question: "添付教材やメモから、正答/誤答/苦手単元/次の1問をやさしく分析してください。",
+        outputFormat: "study-rpg-daily-json",
+      },
+    };
+
+    updateState((current) => ({
+      ...current,
+      player: {
+        ...current.player,
+        xp: current.player.xp + xp,
+        coin: current.player.coin + coin,
+      },
+      completedLog: [
+        {
+          id: `scan-${Date.now()}`,
+          subject: draft.subject,
+          title: `${draft.subject} ${draft.purpose}`,
+          xp,
+          coin,
+          completedAt: new Date().toISOString(),
+          source: "scan",
+        },
+        ...current.completedLog,
+      ].slice(0, 40),
+      recoveryLog: [...generated.recoveryQuests, ...current.recoveryLog].slice(0, 20),
+      scanLogs: [{ ...draft, generated, savedAt: new Date().toISOString() }, ...(current.scanLogs || [])].slice(0, 20),
+      town: {
+        ...current.town,
+        growth: clampPercent(current.town.growth + 2),
+      },
+    }));
+    setScanDraft({ ...draft, generated, saved: true });
+    setSparkle(true);
+    window.setTimeout(() => setSparkle(false), 900);
+    setToast("今日の成果を世界に保存したよ");
+  }
+
+  function openLeefelProject() {
+    const draft = scanDraft || createScanDraft(state);
+    const text = JSON.stringify(draft.generated || buildPreviewScanJson(draft), null, 2);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    window.open(state.settings.leefelProjectUrl || "https://chatgpt.com/", "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -363,6 +476,16 @@ export default function App() {
       </div>
       {toast && <div className="toast">{toast}</div>}
       {dialogueOpen && <DialogueModal state={state} onClose={() => setDialogueOpen(false)} />}
+      {resultOpen && (
+        <ResultModal
+          draft={scanDraft || createScanDraft(state)}
+          onChange={updateScanDraft}
+          onFiles={updateScanFiles}
+          onSave={saveScanResult}
+          onAskLeefel={openLeefelProject}
+          onClose={() => setResultOpen(false)}
+        />
+      )}
       {avatarOpen && <AvatarModal state={state} onSelect={updateProfileIcon} onClose={() => setAvatarOpen(false)} />}
       {roomOpen && (
         <RoomModal
@@ -384,6 +507,44 @@ function formatTimer(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
   const seconds = (totalSeconds % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+function createScanDraft(state) {
+  const timerMinutes = Math.floor((state.timer?.elapsedSeconds || 0) / 60);
+  return {
+    subject: "数学",
+    purpose: "ワーク確認",
+    studyMinutes: Math.max(5, timerMinutes),
+    driveUrl: "",
+    files: [],
+    memo: "",
+    weakPoint: "",
+    generated: null,
+  };
+}
+
+function buildPreviewScanJson(draft) {
+  const xp = Math.max(10, Math.round(Number(draft.studyMinutes || 0) * 0.8));
+  const coin = Math.max(8, Math.round(Number(draft.studyMinutes || 0) * 0.55));
+  return {
+    date: todayString(),
+    studyMinutes: Number(draft.studyMinutes || 0),
+    completedQuests: [
+      {
+        subject: draft.subject,
+        title: `${draft.subject} ${draft.purpose}`,
+        xp,
+        coin,
+      },
+    ],
+    recoveryQuests: draft.weakPoint ? [{ subject: draft.subject, title: `${draft.weakPoint} リカバリー`, xp: 35, coin: 25 }] : [],
+    rewards: { xp, coin },
+    evidence: {
+      driveUrl: draft.driveUrl,
+      files: draft.files,
+      memo: draft.memo,
+    },
+  };
 }
 
 function TopBar({ state, xpProgress, setTab, onAvatarEdit }) {
@@ -486,7 +647,7 @@ function HomeScreen({
             <strong className="timer-display">{formatTimer(timerSeconds)}</strong>
             <div className="timer-actions">
               <button type="button" onClick={() => setTimerRunning(!timerRunning)}>{timerRunning ? "一時停止" : "スタート"}</button>
-              <button type="button" onClick={recordTimer}>記録</button>
+              <button type="button" onClick={recordTimer}>終了して成果スキャン</button>
               <button type="button" onClick={resetTimer}>リセット</button>
             </div>
           </Panel>
@@ -625,12 +786,69 @@ function SettingsScreen({ state, updateState, resetGame }) {
         <label>テスト日<input type="date" value={settings.testDate} onChange={(e) => setSetting("testDate", e.target.value)} /></label>
         <label>完了ページ<input type="number" value={settings.workDonePages} onChange={(e) => setSetting("workDonePages", Number(e.target.value))} /></label>
         <label>総ページ<input type="number" value={settings.workTotalPages} onChange={(e) => setSetting("workTotalPages", Number(e.target.value))} /></label>
+        <label>リーフェルGPT URL<input value={settings.leefelProjectUrl || ""} onChange={(e) => setSetting("leefelProjectUrl", e.target.value)} placeholder="https://chatgpt.com/g/..." /></label>
       </Panel>
       <Panel>
         <h2>保存</h2>
         <p>記録はこのiPadのSafariに保存されます。</p>
         <button className="danger-button" onClick={resetGame}>データを初期化</button>
       </Panel>
+    </div>
+  );
+}
+
+function ResultModal({ draft, onChange, onFiles, onSave, onAskLeefel, onClose }) {
+  const preview = draft.generated || buildPreviewScanJson(draft);
+  return (
+    <div className="modal-backdrop">
+      <section className="modal result-modal">
+        <div className="panel-head">
+          <div>
+            <p className="eyebrow">今日もおつかれさま！</p>
+            <h2>今日の成果をスキャンしよう</h2>
+          </div>
+          <button onClick={onClose}>×</button>
+        </div>
+        <div className="result-layout">
+          <div className="scan-form">
+            <label>教科
+              <select value={draft.subject} onChange={(event) => onChange({ subject: event.target.value })}>
+                {subjectOptions.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
+              </select>
+            </label>
+            <label>目的
+              <select value={draft.purpose} onChange={(event) => onChange({ purpose: event.target.value })}>
+                {purposeOptions.map((purpose) => <option key={purpose} value={purpose}>{purpose}</option>)}
+              </select>
+            </label>
+            <label>今日の分数
+              <input type="number" min="0" value={draft.studyMinutes} onChange={(event) => onChange({ studyMinutes: Number(event.target.value) })} />
+            </label>
+            <label>Google Drive 教材URL
+              <input value={draft.driveUrl} onChange={(event) => onChange({ driveUrl: event.target.value })} placeholder="共有リンクを貼る" />
+            </label>
+            <label>写真 / PDF
+              <input type="file" accept="image/*,.pdf" multiple onChange={(event) => onFiles(event.target.files)} />
+            </label>
+            <label>メモ
+              <textarea value={draft.memo} onChange={(event) => onChange({ memo: event.target.value })} placeholder="間違えた問題、ページ、先生に聞きたいことなど" />
+            </label>
+            <label>苦手かも
+              <input value={draft.weakPoint} onChange={(event) => onChange({ weakPoint: event.target.value })} placeholder="一次関数、英単語、化学変化など" />
+            </label>
+          </div>
+          <div className="scan-preview">
+            <img src={asset("leefel.png")} alt="" />
+            <h3>AI解析用JSON</h3>
+            <pre>{JSON.stringify(preview, null, 2)}</pre>
+            <div className="scan-actions">
+              <button className="primary-button" type="button" onClick={onSave} disabled={draft.saved}>{draft.saved ? "保存済み" : "XP・コインに保存"}</button>
+              <button className="primary-button pink" type="button" onClick={onAskLeefel}>リーフェルに聞く</button>
+            </div>
+            <p>「リーフェルに聞く」はJSONをコピーして、設定したChatGPT Projectへ移動します。</p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

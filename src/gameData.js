@@ -122,6 +122,7 @@ export function createInitialState() {
       testDate: "2026-06-12",
       workDonePages: 48,
       workTotalPages: 77,
+      leefelProjectUrl: "https://chatgpt.com/",
     },
     avatar: {
       outfit: "outfit-sr-1",
@@ -158,5 +159,6 @@ export function createInitialState() {
     },
     gachaHistory: [],
     importedDates: [],
+    scanLogs: [],
   };
 }
