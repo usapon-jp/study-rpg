@@ -35,6 +35,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 button,
@@ -58,7 +59,8 @@ button {
 .game-frame {
   position: relative;
   max-width: 1448px;
-  min-height: calc(100vh - 24px);
+  height: calc(100vh - clamp(16px, 2.4vw, 36px));
+  min-height: 700px;
   margin: 0 auto;
   overflow: hidden;
   border: 1px solid rgba(150, 113, 66, 0.3);
@@ -155,16 +157,21 @@ button {
   background: #fff5e6;
 }
 
-.profile-avatar-button span {
+.profile-edit-mark {
   position: absolute;
-  right: -2px;
-  bottom: 2px;
-  padding: 3px 8px;
+  right: 4px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(125, 103, 74, 0.18);
   border-radius: 999px;
-  background: #7f9a66;
-  color: #fff;
-  font-size: 0.68rem;
+  background: rgba(255, 250, 240, 0.68);
+  color: rgba(105, 82, 56, 0.5);
+  font-size: 0.8rem;
   font-weight: 900;
+  box-shadow: 0 4px 10px rgba(92, 68, 40, 0.08);
 }
 
 .eyebrow {
@@ -303,7 +310,8 @@ button {
 }
 
 .screen {
-  min-height: calc(100vh - 24px);
+  height: 100%;
+  min-height: 0;
   padding: 136px 20px 108px;
   overflow-y: auto;
 }
@@ -311,7 +319,7 @@ button {
 .home-scene {
   position: absolute;
   inset: 0;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 132px 20px 148px;
   background: #f5ead7;
 }
@@ -350,7 +358,7 @@ button {
   gap: 14px;
   width: 440px;
   max-width: 31vw;
-  padding-bottom: 132px;
+  padding-bottom: 0;
 }
 
 .right-stack {
@@ -1018,6 +1026,69 @@ h3 {
   margin: 44px 36px 0 auto;
 }
 
+.gacha-effect {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 246, 204, 0.92), rgba(255, 246, 204, 0.34) 26%, transparent 58%),
+    rgba(75, 54, 34, 0.18);
+  animation: gachaVeil 1550ms ease both;
+  pointer-events: none;
+}
+
+.closet-aura {
+  position: absolute;
+  width: min(360px, 42vw);
+  aspect-ratio: 1;
+  border: 2px solid rgba(231, 189, 82, 0.46);
+  border-radius: 50%;
+  box-shadow: 0 0 44px rgba(240, 205, 96, 0.52), inset 0 0 34px rgba(255, 251, 218, 0.8);
+  animation: closetPulse 1450ms ease both;
+}
+
+.closet-aura span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 42px;
+  border-radius: 999px 999px 8px 8px;
+  background: linear-gradient(180deg, #fff8c7, #d9b45c);
+  transform-origin: 0 0;
+  box-shadow: 0 0 18px rgba(241, 215, 121, 0.8);
+}
+
+.closet-aura span:nth-child(1) { transform: rotate(24deg) translate(120px, -8px); }
+.closet-aura span:nth-child(2) { transform: rotate(148deg) translate(120px, -8px); }
+.closet-aura span:nth-child(3) { transform: rotate(270deg) translate(120px, -8px); }
+
+.gacha-effect-item {
+  position: relative;
+  z-index: 1;
+  width: min(220px, 25vw);
+  height: min(220px, 25vw);
+  object-fit: contain;
+  filter: drop-shadow(0 18px 24px rgba(86, 57, 26, 0.28));
+  animation: gachaItemReveal 1550ms cubic-bezier(.18,.9,.18,1) both;
+}
+
+.gacha-effect p {
+  position: absolute;
+  bottom: 22%;
+  margin: 0;
+  padding: 12px 24px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.9);
+  color: #5d7648;
+  font-weight: 900;
+  box-shadow: var(--soft-shadow);
+  animation: panelIn 500ms 320ms ease both;
+}
+
 .reward-card {
   display: grid;
   grid-template-rows: 92px auto auto auto;
@@ -1088,7 +1159,6 @@ h3 {
 .settings-panel select,
 .settings-panel textarea,
 .scan-form input,
-.scan-form select,
 .scan-form textarea {
   min-height: 48px;
   padding: 8px 12px;
@@ -1171,18 +1241,19 @@ h3 {
 }
 
 .result-modal {
-  width: min(1040px, 94vw);
+  width: min(1120px, 94vw);
 }
 
 .result-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(320px, 0.9fr) minmax(380px, 1fr);
   gap: 16px;
 }
 
 .scan-form {
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: 12px;
 }
 
 .scan-form label {
@@ -1190,6 +1261,93 @@ h3 {
   gap: 6px;
   color: var(--muted);
   font-weight: 900;
+}
+
+.scan-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.scan-choice-row,
+.scan-choice-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.scan-choice-row {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.scan-choice-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scan-choice-row button,
+.scan-choice-grid button,
+.drive-folder-card button,
+.scan-main-button {
+  min-height: 44px;
+  border: 1px solid rgba(145, 111, 68, 0.24);
+  border-radius: 14px;
+  background: rgba(255, 253, 246, 0.86);
+  color: #614833;
+  font-weight: 900;
+  box-shadow: 0 4px 10px rgba(99, 67, 33, 0.06);
+  cursor: pointer;
+}
+
+.scan-choice-row button.active,
+.scan-choice-grid button.active {
+  background: linear-gradient(180deg, #f8e4b4, #fff8e7);
+  outline: 2px solid rgba(143, 169, 111, 0.42);
+}
+
+.drive-folder-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed rgba(145, 111, 68, 0.34);
+  border-radius: 18px;
+  background: rgba(239, 247, 224, 0.72);
+}
+
+.drive-folder-card span {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+.drive-folder-card strong {
+  color: #4f6b3d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.drive-folder-card small {
+  color: #7d6a57;
+  font-size: 0.8rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.drive-folder-card button {
+  background: #fff7de;
+}
+
+.scan-main-button {
+  min-height: 58px;
+  border-color: rgba(145, 111, 68, 0.2);
+  background: linear-gradient(180deg, #8faf72, #6d8b55);
+  color: white;
+  font-size: 1.02rem;
+}
+
+.scan-main-button:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .scan-preview {
@@ -1212,6 +1370,66 @@ h3 {
 
 .scan-preview h3 {
   padding-right: 98px;
+}
+
+.scan-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding-right: 104px;
+}
+
+.scan-flow span {
+  min-height: 48px;
+  padding: 8px;
+  border: 1px solid rgba(145, 111, 68, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 253, 246, 0.72);
+  color: #6f5d4b;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.scan-result-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(143, 169, 111, 0.3);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(248, 228, 180, 0.5), transparent 42%),
+    rgba(255, 253, 246, 0.9);
+  box-shadow: 0 12px 24px rgba(99, 67, 33, 0.08);
+}
+
+.scan-result-card p {
+  margin: 0;
+  color: #4f6b3d;
+  font-weight: 900;
+}
+
+.scan-result-card ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #584332;
+  font-weight: 850;
+}
+
+.scan-result-card div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.scan-result-card strong {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(239, 247, 224, 0.95);
+  color: #64824e;
 }
 
 .scan-preview pre {
@@ -1354,6 +1572,25 @@ h3 {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes gachaVeil {
+  0% { opacity: 0; }
+  16%, 78% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes closetPulse {
+  0% { opacity: 0; transform: scale(0.5) rotate(-16deg); }
+  42% { opacity: 1; transform: scale(1.05) rotate(8deg); }
+  100% { opacity: 0; transform: scale(1.28) rotate(22deg); }
+}
+
+@keyframes gachaItemReveal {
+  0% { opacity: 0; transform: translateY(22px) scale(0.45) rotate(-8deg); filter: brightness(2) blur(2px); }
+  46% { opacity: 1; transform: translateY(-8px) scale(1.08) rotate(3deg); filter: brightness(1.35) blur(0); }
+  78% { opacity: 1; transform: translateY(0) scale(1); filter: brightness(1); }
+  100% { opacity: 0; transform: translateY(-10px) scale(0.96); }
+}
+
 @keyframes sparkleBurst {
   from { opacity: 0; transform: translate(-50%, 20px) scale(0.6); }
   45% { opacity: 1; }
@@ -1373,6 +1610,7 @@ h3 {
 
   .game-frame {
     min-width: 1180px;
+    height: 100vh;
     min-height: 760px;
     border-radius: 0;
   }
@@ -1380,7 +1618,7 @@ h3 {
   .screen,
   .home-scene {
     position: absolute;
-    min-height: calc(100vh - 24px);
+    min-height: 760px;
     padding-top: 132px;
   }
 
@@ -1496,6 +1734,247 @@ h3 {
   .gacha-results {
     width: auto;
     margin: 20px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 820px) {
+  .app {
+    padding: 6px;
+  }
+
+  .game-frame {
+    height: calc(100vh - 12px);
+    min-height: 0;
+    border-radius: 18px;
+  }
+
+  .top-bar {
+    top: 10px;
+    right: 12px;
+    left: 12px;
+  }
+
+  .profile-card {
+    width: 336px;
+    min-height: 92px;
+    padding: 9px 18px 9px 10px;
+  }
+
+  .profile-avatar-button {
+    width: 74px;
+    height: 74px;
+  }
+
+  .profile-avatar {
+    width: 70px;
+    height: 70px;
+  }
+
+  .currency-badge {
+    min-width: 138px;
+    height: 54px;
+    font-size: 1.1rem;
+  }
+
+  .currency-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .icon-button {
+    width: 54px;
+    height: 54px;
+  }
+
+  .home-scene {
+    padding: 96px 16px 72px;
+  }
+
+  .left-stack {
+    gap: 6px;
+    width: 390px;
+    max-width: 32vw;
+  }
+
+  .right-stack {
+    top: 96px;
+    right: 16px;
+    gap: 6px;
+    width: 304px;
+    max-width: 25vw;
+  }
+
+  .panel {
+    padding: 10px;
+    border-radius: 16px;
+  }
+
+  .ribbon-panel h2,
+  .recovery-card h3 {
+    margin: -4px auto 6px;
+    padding: 6px 22px;
+    font-size: 1rem;
+  }
+
+  .quest-row {
+    min-height: 54px;
+    grid-template-columns: 40px minmax(0, 1fr) 32px;
+    margin: 4px 0;
+    padding: 6px 8px;
+    font-size: 0.86rem;
+  }
+
+  .quest-row img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .quest-row b {
+    width: 32px;
+    height: 32px;
+  }
+
+  .recovery-card button {
+    min-height: 58px;
+    grid-template-columns: 42px 1fr;
+    padding: 8px;
+    font-size: 0.86rem;
+  }
+
+  .recovery-card button span {
+    width: 36px;
+    height: 36px;
+  }
+
+  .week-row span {
+    min-height: 38px;
+    font-size: 0.78rem;
+  }
+
+  .week-row b {
+    font-size: 1rem;
+  }
+
+  .mini-stats .panel {
+    height: 58px;
+    min-height: 58px;
+    padding: 8px;
+  }
+
+  .timer-card,
+  .progress-mode-card {
+    gap: 2px;
+  }
+
+  .mini-stats b {
+    font-size: 1.05rem;
+  }
+
+  .mini-stats span {
+    font-size: 0.74rem;
+  }
+
+  .timer-display {
+    display: none;
+  }
+
+  .timer-actions button,
+  .mode-tabs button {
+    min-height: 18px;
+    padding: 1px 5px;
+    font-size: 0.58rem;
+  }
+
+  .timer-actions button:nth-child(3) {
+    display: none;
+  }
+
+  .room-preview {
+    height: 112px;
+  }
+
+  .town-card img {
+    height: 72px;
+  }
+
+  .book-link,
+  .primary-button,
+  .danger-button {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+
+  .room-card .primary-button {
+    margin-top: 8px;
+  }
+
+  .metric {
+    margin: 8px 0 5px;
+    font-size: 0.84rem;
+  }
+
+  .progress {
+    height: 12px;
+  }
+
+  .town-card h3,
+  .town-card p,
+  .room-card h2 {
+    margin-bottom: 5px;
+  }
+
+  .book-link img {
+    width: 34px;
+    height: 28px;
+  }
+
+  .test-chip {
+    top: 106px;
+    left: calc(50% - 105px);
+    padding: 9px 14px;
+  }
+
+  .hero-stage {
+    inset: 78px 302px 72px 382px;
+  }
+
+  .protagonist {
+    width: min(34vw, 360px);
+    max-height: 76vh;
+  }
+
+  .leefel-button {
+    right: 12px;
+    bottom: 46px;
+    width: 222px;
+    height: 236px;
+  }
+
+  .leefel {
+    width: 132px;
+  }
+
+  .speech {
+    right: 90px;
+    bottom: 132px;
+    width: 226px;
+    padding: 12px 16px;
+    font-size: 0.88rem;
+  }
+
+  .bottom-nav {
+    bottom: 6px;
+    width: min(calc(100vw - 20px), 1420px);
+  }
+
+  .bottom-nav button {
+    min-height: 52px;
+    font-size: 0.74rem;
+  }
+
+  .nav-icon {
+    width: 40px;
+    height: 30px;
   }
 }
 

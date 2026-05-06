@@ -122,7 +122,9 @@ export function createInitialState() {
       testDate: "2026-06-12",
       workDonePages: 48,
       workTotalPages: 77,
-      leefelProjectUrl: "https://chatgpt.com/",
+      leefelProjectUrl: "https://chatgpt.com/g/g-p-69fac7dd7ce48191a678da26f5caf56d-tamamian-qiang-rpg/project",
+      driveRootName: "勉強RPG（たま）",
+      driveRootUrl: "https://drive.google.com/drive/folders/1STT9K8fDtIyihAz5QVDD-l8YxdguCn7a",
     },
     avatar: {
       outfit: "outfit-sr-1",

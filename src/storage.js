@@ -17,11 +17,29 @@ export function saveState(state) {
 }
 
 function mergeState(base, saved) {
+  const savedSettings = saved.settings || {};
+  const settings = {
+    ...base.settings,
+    ...savedSettings,
+  };
+
+  if (!savedSettings.leefelProjectUrl || savedSettings.leefelProjectUrl === "https://chatgpt.com/") {
+    settings.leefelProjectUrl = base.settings.leefelProjectUrl;
+  }
+
+  if (!savedSettings.driveRootName) {
+    settings.driveRootName = base.settings.driveRootName;
+  }
+
+  if (!savedSettings.driveRootUrl) {
+    settings.driveRootUrl = base.settings.driveRootUrl;
+  }
+
   return {
     ...base,
     ...saved,
     player: { ...base.player, ...saved.player },
-    settings: { ...base.settings, ...saved.settings },
+    settings,
     avatar: { ...base.avatar, ...saved.avatar },
     inventory: {
       ...base.inventory,

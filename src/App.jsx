@@ -12,8 +12,40 @@ import {
 import { loadState, saveState } from "./storage";
 
 const rarityWeight = { N: 70, R: 25, SR: 5 };
-const subjectOptions = ["数学", "英語", "理科", "社会", "国語"];
-const purposeOptions = ["ワーク確認", "丸つけ後の復習", "苦手分析", "テスト対策", "暗記チェック"];
+const subjectOptions = ["英語", "数学", "理科", "社会", "国語"];
+const purposeOptions = ["宿題", "テスト勉強", "チャレンジ", "自由学習"];
+const scanTaskPresets = {
+  英語: {
+    宿題: ["ワーク p12〜15", "単語20個", "教科書音読"],
+    テスト勉強: ["Unit 1〜3の確認", "単語20個", "本文音読"],
+    チャレンジ: ["長文1つ", "知らない単語メモ", "音読チャレンジ"],
+    自由学習: ["好きな英文を読む", "単語メモ", "1文だけ英作文"],
+  },
+  数学: {
+    宿題: ["ワーク p12〜15", "計算問題10問", "間違い直し"],
+    テスト勉強: ["一次関数の確認", "公式メモ", "類題3問"],
+    チャレンジ: ["応用問題2問", "解き方メモ", "別解さがし"],
+    自由学習: ["気になる単元を復習", "例題を写す", "1問だけ説明"],
+  },
+  理科: {
+    宿題: ["ノート整理", "実験のまとめ", "用語チェック"],
+    テスト勉強: ["重要語句15個", "図の確認", "一問一答"],
+    チャレンジ: ["発展問題1つ", "理由を書く", "観察メモ"],
+    自由学習: ["身近な現象メモ", "図解を描く", "用語を調べる"],
+  },
+  社会: {
+    宿題: ["ワーク p12〜15", "地図の確認", "用語チェック"],
+    テスト勉強: ["重要語句20個", "年表確認", "資料読み取り"],
+    チャレンジ: ["記述問題1つ", "理由を書く", "関連語句メモ"],
+    自由学習: ["ニュースを1つ読む", "地図を見る", "気づきをメモ"],
+  },
+  国語: {
+    宿題: ["漢字20個", "本文音読", "ワーク p12〜15"],
+    テスト勉強: ["漢字確認", "文法チェック", "本文の要点メモ"],
+    チャレンジ: ["記述問題1つ", "語句調べ", "要約3行"],
+    自由学習: ["好きな本を読む", "気になる言葉メモ", "短い感想"],
+  },
+};
 
 function daysUntil(dateValue) {
   const today = new Date();
@@ -28,6 +60,26 @@ function todayString() {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function drivePathFor(draft) {
+  const root = draft.driveRootName || "勉強RPG（たま）";
+  return `${root}/教材/${draft.subject || subjectOptions[0]}/${draft.purpose || purposeOptions[0]}/`;
+}
+
+function driveOutputPathsFor(draft) {
+  const root = draft.driveRootName || "勉強RPG（たま）";
+  return {
+    submission: `${root}/学習ログ/今日の提出/${draft.subject || subjectOptions[0]}/`,
+    analysisJson: `${root}/学習ログ/AI解析JSON/`,
+    dailyRecord: `${root}/学習ログ/デイリー記録/`,
+    resultCard: `${root}/学習ログ/成果カード/`,
+    monthlyLog: `${root}/学習ログ/月別ログ/${todayString().slice(0, 7)}/`,
+  };
+}
+
+function driveSearchUrl(draft) {
+  return `https://drive.google.com/drive/search?q=${encodeURIComponent(`${draft.subject} ${draft.purpose}`)}`;
 }
 
 function clampPercent(value) {
@@ -77,6 +129,7 @@ export default function App() {
   const [jsonText, setJsonText] = useState("");
   const [importError, setImportError] = useState("");
   const [gachaResults, setGachaResults] = useState([]);
+  const [gachaEffect, setGachaEffect] = useState({ active: false, items: [] });
   const [roomOpen, setRoomOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(false);
@@ -208,6 +261,8 @@ export default function App() {
       return;
     }
     const results = Array.from({ length: count }, rollOne);
+    setGachaResults([]);
+    setGachaEffect({ active: true, items: results });
     updateState((current) => ({
       ...current,
       player: { ...current.player, coin: current.player.coin - cost },
@@ -217,9 +272,12 @@ export default function App() {
       },
       gachaHistory: [...results, ...current.gachaHistory].slice(0, 40),
     }));
-    setGachaResults(results);
     setSparkle(true);
-    window.setTimeout(() => setSparkle(false), 1000);
+    window.setTimeout(() => {
+      setGachaEffect({ active: false, items: [] });
+      setGachaResults(results);
+      setSparkle(false);
+    }, 1550);
   }
 
   function buyFurniture(item) {
@@ -330,7 +388,15 @@ export default function App() {
   }
 
   function updateScanDraft(patch) {
-    setScanDraft((current) => ({ ...(current || createScanDraft(state)), ...patch }));
+    setScanDraft((current) => {
+      const base = current || createScanDraft(state);
+      const shouldReset = "subject" in patch || "purpose" in patch || "memo" in patch || "weakPoint" in patch || "driveUrl" in patch;
+      return {
+        ...base,
+        ...patch,
+        ...(shouldReset ? { analysis: null, generated: null, saved: false } : {}),
+      };
+    });
   }
 
   function updateScanFiles(fileList) {
@@ -343,49 +409,34 @@ export default function App() {
     updateScanDraft({ files });
   }
 
+  function scanStudyResult() {
+    const draft = scanDraft || createScanDraft(state);
+    setScanDraft({ ...draft, scanning: true, analysis: null, generated: null, saved: false });
+    window.setTimeout(() => {
+      setScanDraft((current) => {
+        const latest = current || draft;
+        const analysis = createScanAnalysis(latest);
+        return { ...latest, analysis, generated: buildScanJson(latest, analysis), scanning: false, saved: false };
+      });
+      setToast("教材から今日の成果カードを作ったよ");
+    }, 650);
+  }
+
+  function openDriveFolder() {
+    const draft = scanDraft || createScanDraft(state);
+    window.open(draft.driveUrl || draft.driveRootUrl || driveSearchUrl(draft), "_blank", "noopener,noreferrer");
+  }
+
   function saveScanResult() {
     const draft = scanDraft || createScanDraft(state);
     if (draft.saved) {
       setToast("この成果はもう保存済みだよ");
       return;
     }
-    const minutes = Math.max(5, Number(draft.studyMinutes || 0));
-    const xp = Math.max(10, Math.round(minutes * 0.8));
-    const coin = Math.max(8, Math.round(minutes * 0.55));
-    const generated = {
-      date: todayString(),
-      studyMinutes: minutes,
-      completedQuests: [
-        {
-          subject: draft.subject,
-          title: `${draft.subject} ${draft.purpose}`,
-          xp,
-          coin,
-          evidence: {
-            driveUrl: draft.driveUrl,
-            files: draft.files,
-            memo: draft.memo,
-          },
-        },
-      ],
-      recoveryQuests: draft.weakPoint
-        ? [
-            {
-              subject: draft.subject,
-              title: `${draft.weakPoint} リカバリー`,
-              xp: 35,
-              coin: 25,
-            },
-          ]
-        : [],
-      rewards: { xp, coin },
-      aiAnalysisRequest: {
-        subject: draft.subject,
-        purpose: draft.purpose,
-        question: "添付教材やメモから、正答/誤答/苦手単元/次の1問をやさしく分析してください。",
-        outputFormat: "study-rpg-daily-json",
-      },
-    };
+    const analysis = draft.analysis || createScanAnalysis(draft);
+    const generated = draft.generated || buildScanJson(draft, analysis);
+    const xp = generated.rewards.xp;
+    const coin = generated.rewards.coin;
 
     updateState((current) => ({
       ...current,
@@ -395,25 +446,25 @@ export default function App() {
         coin: current.player.coin + coin,
       },
       completedLog: [
-        {
-          id: `scan-${Date.now()}`,
+        ...generated.completedQuests.map((quest, index) => ({
+          id: `scan-${Date.now()}-${index}`,
           subject: draft.subject,
-          title: `${draft.subject} ${draft.purpose}`,
-          xp,
-          coin,
+          title: quest.title,
+          xp: index === 0 ? xp : 0,
+          coin: index === 0 ? coin : 0,
           completedAt: new Date().toISOString(),
           source: "scan",
-        },
+        })),
         ...current.completedLog,
       ].slice(0, 40),
       recoveryLog: [...generated.recoveryQuests, ...current.recoveryLog].slice(0, 20),
-      scanLogs: [{ ...draft, generated, savedAt: new Date().toISOString() }, ...(current.scanLogs || [])].slice(0, 20),
+      scanLogs: [{ ...draft, analysis, generated, savedAt: new Date().toISOString() }, ...(current.scanLogs || [])].slice(0, 20),
       town: {
         ...current.town,
         growth: clampPercent(current.town.growth + 2),
       },
     }));
-    setScanDraft({ ...draft, generated, saved: true });
+    setScanDraft({ ...draft, analysis, generated, saved: true, scanning: false });
     setSparkle(true);
     window.setTimeout(() => setSparkle(false), 900);
     setToast("今日の成果を世界に保存したよ");
@@ -468,7 +519,7 @@ export default function App() {
           )}
           {tab === "town" && <TownScreen state={state} townStage={townStage} placeFurniture={placeFurniture} />}
           {tab === "encyclopedia" && <EncyclopediaScreen state={state} />}
-          {tab === "gacha" && <GachaScreen state={state} runGacha={runGacha} gachaResults={gachaResults} />}
+          {tab === "gacha" && <GachaScreen state={state} runGacha={runGacha} gachaResults={gachaResults} gachaEffect={gachaEffect} />}
           {tab === "shop" && <ShopScreen state={state} buyFurniture={buyFurniture} />}
           {tab === "settings" && <SettingsScreen state={state} updateState={updateState} resetGame={resetGame} />}
         </section>
@@ -481,6 +532,8 @@ export default function App() {
           draft={scanDraft || createScanDraft(state)}
           onChange={updateScanDraft}
           onFiles={updateScanFiles}
+          onScan={scanStudyResult}
+          onOpenDrive={openDriveFolder}
           onSave={saveScanResult}
           onAskLeefel={openLeefelProject}
           onClose={() => setResultOpen(false)}
@@ -512,39 +565,76 @@ function formatTimer(totalSeconds) {
 function createScanDraft(state) {
   const timerMinutes = Math.floor((state.timer?.elapsedSeconds || 0) / 60);
   return {
-    subject: "数学",
-    purpose: "ワーク確認",
+    subject: "英語",
+    purpose: "宿題",
     studyMinutes: Math.max(5, timerMinutes),
     driveUrl: "",
+    driveRootName: state.settings.driveRootName || "勉強RPG（たま）",
+    driveRootUrl: state.settings.driveRootUrl || "",
     files: [],
     memo: "",
     weakPoint: "",
+    analysis: null,
     generated: null,
+    scanning: false,
+    saved: false,
   };
 }
 
-function buildPreviewScanJson(draft) {
-  const xp = Math.max(10, Math.round(Number(draft.studyMinutes || 0) * 0.8));
-  const coin = Math.max(8, Math.round(Number(draft.studyMinutes || 0) * 0.55));
+function createScanAnalysis(draft) {
+  const tasks = scanTaskPresets[draft.subject]?.[draft.purpose] || scanTaskPresets.英語.宿題;
+  const memoTasks = draft.memo
+    .split(/[、,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  return {
+    subject: draft.subject,
+    purpose: draft.purpose,
+    tasks: Array.from(new Set([...tasks, ...memoTasks])).slice(0, 5),
+    weakPoint: draft.weakPoint || (draft.purpose === "テスト勉強" ? `${draft.subject}の復習ポイント` : ""),
+    summary: `${draft.subject}の${draft.purpose}を、今日のクエストに変えました。`,
+  };
+}
+
+function buildScanJson(draft, analysis = createScanAnalysis(draft)) {
+  const minutes = Math.max(5, Number(draft.studyMinutes || 0));
+  const xp = Math.max(20, Math.round(minutes * 0.6) + analysis.tasks.length * 12);
+  const coin = Math.max(8, Math.round(minutes * 0.12) + analysis.tasks.length * 4);
   return {
     date: todayString(),
-    studyMinutes: Number(draft.studyMinutes || 0),
-    completedQuests: [
-      {
-        subject: draft.subject,
-        title: `${draft.subject} ${draft.purpose}`,
-        xp,
-        coin,
-      },
-    ],
-    recoveryQuests: draft.weakPoint ? [{ subject: draft.subject, title: `${draft.weakPoint} リカバリー`, xp: 35, coin: 25 }] : [],
+    studyMinutes: minutes,
+    completedQuests: analysis.tasks.map((task) => ({
+      subject: draft.subject,
+      purpose: draft.purpose,
+      title: task,
+      xp: Math.max(6, Math.round(xp / analysis.tasks.length)),
+      coin: Math.max(2, Math.round(coin / analysis.tasks.length)),
+    })),
+    recoveryQuests: analysis.weakPoint ? [{ subject: draft.subject, title: `${analysis.weakPoint} リカバリー`, xp: 35, coin: 25 }] : [],
     rewards: { xp, coin },
+    drive: {
+      path: drivePathFor(draft),
+      outputPaths: driveOutputPathsFor(draft),
+      rootUrl: draft.driveRootUrl || "",
+      url: draft.driveUrl || draft.driveRootUrl || driveSearchUrl(draft),
+    },
     evidence: {
       driveUrl: draft.driveUrl,
       files: draft.files,
       memo: draft.memo,
     },
+    aiAnalysisRequest: {
+      subject: draft.subject,
+      purpose: draft.purpose,
+      question: "教材・写真・PDF・メモから、完了した内容、苦手ポイント、次の小さな1問をやさしく分析してください。",
+      outputFormat: "study-rpg-daily-json",
+    },
   };
+}
+
+function buildPreviewScanJson(draft) {
+  return buildScanJson(draft, draft.analysis || createScanAnalysis(draft));
 }
 
 function TopBar({ state, xpProgress, setTab, onAvatarEdit }) {
@@ -553,7 +643,7 @@ function TopBar({ state, xpProgress, setTab, onAvatarEdit }) {
       <div className="profile-card">
         <button className="profile-avatar-button" type="button" onClick={onAvatarEdit} aria-label="アイコンを編集">
           <img src={asset(state.avatar?.profileIcon || "protagonist.png")} alt="" className="profile-avatar" />
-          <span>編集</span>
+          <span className="profile-edit-mark" aria-hidden="true">✎</span>
         </button>
         <div>
           <p className="eyebrow">たまのマイルーム</p>
@@ -751,7 +841,7 @@ function EncyclopediaScreen({ state }) {
   );
 }
 
-function GachaScreen({ state, runGacha, gachaResults }) {
+function GachaScreen({ state, runGacha, gachaResults, gachaEffect }) {
   return (
     <div className="gacha-screen">
       <img src={asset("gacha-bg.png")} alt="" className="gacha-bg" />
@@ -759,9 +849,10 @@ function GachaScreen({ state, runGacha, gachaResults }) {
         <p className="eyebrow">ごほうびクローゼット</p>
         <h1>森の祝福をまとって</h1>
         <p>衣装・髪型・アクセサリーだけが出るよ。精霊は町づくりで自然に遊びに来ます。</p>
-        <div className="button-row"><button className="primary-button" onClick={() => runGacha(1)}>1回 100</button><button className="primary-button pink" onClick={() => runGacha(10)}>10回 900</button></div>
+        <div className="button-row"><button className="primary-button" onClick={() => runGacha(1)} disabled={gachaEffect.active}>1回 100</button><button className="primary-button pink" onClick={() => runGacha(10)} disabled={gachaEffect.active}>10回 900</button></div>
       </Panel>
-      <div className="gacha-results">{gachaResults.map((item, index) => <RewardCard key={`${item.id}-${index}`} item={item} />)}</div>
+      {gachaEffect.active && <GachaEffect items={gachaEffect.items} />}
+      <div className="gacha-results">{gachaResults.map((item, index) => <RewardCard key={`${item.id}-${index}`} item={item} index={index} />)}</div>
     </div>
   );
 }
@@ -787,6 +878,8 @@ function SettingsScreen({ state, updateState, resetGame }) {
         <label>完了ページ<input type="number" value={settings.workDonePages} onChange={(e) => setSetting("workDonePages", Number(e.target.value))} /></label>
         <label>総ページ<input type="number" value={settings.workTotalPages} onChange={(e) => setSetting("workTotalPages", Number(e.target.value))} /></label>
         <label>リーフェルGPT URL<input value={settings.leefelProjectUrl || ""} onChange={(e) => setSetting("leefelProjectUrl", e.target.value)} placeholder="https://chatgpt.com/g/..." /></label>
+        <label>Driveルート名<input value={settings.driveRootName || ""} onChange={(e) => setSetting("driveRootName", e.target.value)} placeholder="勉強RPG（たま）" /></label>
+        <label>Drive共有フォルダURL<input value={settings.driveRootUrl || ""} onChange={(e) => setSetting("driveRootUrl", e.target.value)} placeholder="https://drive.google.com/drive/folders/..." /></label>
       </Panel>
       <Panel>
         <h2>保存</h2>
@@ -797,30 +890,45 @@ function SettingsScreen({ state, updateState, resetGame }) {
   );
 }
 
-function ResultModal({ draft, onChange, onFiles, onSave, onAskLeefel, onClose }) {
+function ResultModal({ draft, onChange, onFiles, onScan, onOpenDrive, onSave, onAskLeefel, onClose }) {
   const preview = draft.generated || buildPreviewScanJson(draft);
+  const analysis = draft.analysis || createScanAnalysis(draft);
+  const drivePath = drivePathFor(draft);
+  const outputPaths = driveOutputPathsFor(draft);
   return (
     <div className="modal-backdrop">
       <section className="modal result-modal">
         <div className="panel-head">
           <div>
-            <p className="eyebrow">今日もおつかれさま！</p>
-            <h2>今日の成果をスキャンしよう</h2>
+            <p className="eyebrow">タイマー終了</p>
+            <h2>📚 今日の成果をスキャン！</h2>
           </div>
           <button onClick={onClose}>×</button>
         </div>
         <div className="result-layout">
           <div className="scan-form">
-            <label>教科
-              <select value={draft.subject} onChange={(event) => onChange({ subject: event.target.value })}>
-                {subjectOptions.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
-              </select>
-            </label>
-            <label>目的
-              <select value={draft.purpose} onChange={(event) => onChange({ purpose: event.target.value })}>
-                {purposeOptions.map((purpose) => <option key={purpose} value={purpose}>{purpose}</option>)}
-              </select>
-            </label>
+            <div>
+              <span className="scan-label">教科</span>
+              <div className="scan-choice-row">
+                {subjectOptions.map((subject) => (
+                  <button className={draft.subject === subject ? "active" : ""} type="button" key={subject} onClick={() => onChange({ subject })}>{subject}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="scan-label">目的</span>
+              <div className="scan-choice-grid">
+                {purposeOptions.map((purpose) => (
+                  <button className={draft.purpose === purpose ? "active" : ""} type="button" key={purpose} onClick={() => onChange({ purpose })}>{purpose}</button>
+                ))}
+              </div>
+            </div>
+            <div className="drive-folder-card">
+              <span>スキャン前に選択</span>
+              <strong>{drivePath}</strong>
+              <small>保存先: {outputPaths.submission}</small>
+              <button type="button" onClick={onOpenDrive}>Google Driveフォルダを開く</button>
+            </div>
             <label>今日の分数
               <input type="number" min="0" value={draft.studyMinutes} onChange={(event) => onChange({ studyMinutes: Number(event.target.value) })} />
             </label>
@@ -836,16 +944,25 @@ function ResultModal({ draft, onChange, onFiles, onSave, onAskLeefel, onClose })
             <label>苦手かも
               <input value={draft.weakPoint} onChange={(event) => onChange({ weakPoint: event.target.value })} placeholder="一次関数、英単語、化学変化など" />
             </label>
+            <button className="scan-main-button" type="button" onClick={onScan} disabled={draft.scanning}>{draft.scanning ? "AIが教材解析中..." : "今日の成果をスキャン！"}</button>
           </div>
           <div className="scan-preview">
             <img src={asset("leefel.png")} alt="" />
+            <div className="scan-flow">
+              {["タイマー終了", "成果スキャン", "AIが教材解析", "クエスト化"].map((step, index) => <span key={step}>{index + 1}. {step}</span>)}
+            </div>
+            <article className="scan-result-card">
+              <p>📘 {analysis.subject} / {analysis.purpose}</p>
+              <ul>{analysis.tasks.map((task) => <li key={task}>✔ {task}</li>)}</ul>
+              <div><strong>✨ +{preview.rewards.xp}XP</strong><strong>🪙 +{preview.rewards.coin}コイン</strong></div>
+            </article>
             <h3>AI解析用JSON</h3>
             <pre>{JSON.stringify(preview, null, 2)}</pre>
             <div className="scan-actions">
               <button className="primary-button" type="button" onClick={onSave} disabled={draft.saved}>{draft.saved ? "保存済み" : "XP・コインに保存"}</button>
-              <button className="primary-button pink" type="button" onClick={onAskLeefel}>リーフェルに聞く</button>
+              <button className="primary-button pink" type="button" onClick={onAskLeefel}>わからないところ聞く？</button>
             </div>
-            <p>「リーフェルに聞く」はJSONをコピーして、設定したChatGPT Projectへ移動します。</p>
+            <p>ボタンを押すとJSONをコピーして、設定したChatGPT Projectへ移動します。</p>
           </div>
         </div>
       </section>
@@ -943,6 +1060,21 @@ function Progress({ value }) {
   return <div className="progress"><span style={{ width: `${clampPercent(value)}%` }} /></div>;
 }
 
+function GachaEffect({ items }) {
+  const featured = items.find((item) => item.rarity === "SR") || items.find((item) => item.rarity === "R") || items[0];
+  return (
+    <div className="gacha-effect" aria-live="polite">
+      <div className="closet-aura">
+        <span />
+        <span />
+        <span />
+      </div>
+      {featured && <img src={asset(featured.icon)} alt="" className="gacha-effect-item" />}
+      <p>森のクローゼットがひらいたよ</p>
+    </div>
+  );
+}
+
 function SpiritCard({ spirit, locked = false }) {
   return <article className={`spirit-card ${locked ? "locked" : ""}`}><img src={asset(spirit.icon)} alt="" /><h3>{locked ? "？？？" : spirit.name}</h3><p>{locked ? "町を育てると会えるよ" : spirit.line}</p></article>;
 }
@@ -951,6 +1083,6 @@ function IconGrid({ items, owned = [], counts = null }) {
   return <div className="item-grid">{items.map((item) => <article className={`icon-card ${owned.length && !owned.includes(item.id) ? "locked" : ""}`} key={item.id}><img src={asset(item.icon)} alt="" /><span>{item.name}</span>{counts && <b>×{counts[item.id] || 0}</b>}</article>)}</div>;
 }
 
-function RewardCard({ item }) {
-  return <article className={`reward-card rarity-${item.rarity.toLowerCase()}`}><img src={asset(item.icon)} alt="" /><span>{item.rarity}</span><strong>{item.name}</strong><small>{item.type}</small></article>;
+function RewardCard({ item, index = 0 }) {
+  return <article className={`reward-card rarity-${item.rarity.toLowerCase()}`} style={{ animationDelay: `${index * 70}ms` }}><img src={asset(item.icon)} alt="" /><span>{item.rarity}</span><strong>{item.name}</strong><small>{item.type}</small></article>;
 }
