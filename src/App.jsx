@@ -295,6 +295,7 @@ export default function App() {
   const totalStudyMinutes = state.player.studyMinutes + Math.floor((state.timer?.elapsedSeconds || 0) / 60);
   const activeQuests = state.quests.filter((quest) => quest.status === "active");
   const visibleQuests = activeQuests.filter((quest) => quest.type === questFilter);
+  const selectedQuest = activeQuests.find((quest) => quest.id === state.studySession?.currentQuestId) || null;
   const townStage = state.town.level >= 30 ? "town-lv30.png" : state.town.level >= 20 ? "town-lv20.png" : state.town.level >= 10 ? "town-lv10.png" : state.town.level >= 5 ? "town-lv5.png" : "town-lv1.png";
 
   const ownedFurniture = useMemo(
@@ -332,6 +333,22 @@ export default function App() {
 
   function updateState(next) {
     setState((current) => (typeof next === "function" ? next(current) : next));
+  }
+
+  function startQuest(questId) {
+    const quest = state.quests.find((item) => item.id === questId);
+    if (!quest) return;
+    updateState((current) => ({
+      ...current,
+      timer: { running: false, elapsedSeconds: 0 },
+      studySession: {
+        currentQuestId: questId,
+        startedAt: new Date().toISOString(),
+      },
+    }));
+    setScanDraft(null);
+    setTab("timer");
+    setToast(`${quest.title}をはじめる準備をしたよ`);
   }
 
   function completeQuest(questId) {
@@ -624,6 +641,7 @@ export default function App() {
   }
 
   function recordTimer() {
+    const quest = selectedQuest || state.quests.find((item) => item.id === state.studySession?.currentQuestId) || null;
     updateState((current) => {
       const minutes = Math.floor((current.timer?.elapsedSeconds || 0) / 60);
       return {
@@ -632,9 +650,9 @@ export default function App() {
         timer: { running: false, elapsedSeconds: 0 },
       };
     });
-    setScanDraft(createScanDraft(state));
+    setScanDraft(createScanDraft(state, quest));
     setResultOpen(true);
-    setToast("タイマーの分を今日の勉強時間に足したよ");
+    setToast("成果を写真やDriveで残せるよ");
   }
 
   function resetTimer() {
@@ -721,6 +739,12 @@ export default function App() {
       ].slice(0, 40),
       recoveryLog: [...generated.recoveryQuests, ...current.recoveryLog].slice(0, 20),
       scanLogs: [{ ...draft, analysis, generated, savedAt: new Date().toISOString() }, ...(current.scanLogs || [])].slice(0, 20),
+      quests: current.quests.map((quest) => (draft.questId && draft.questType !== "free" && quest.id === draft.questId ? { ...quest, status: "done" } : quest)),
+      studySession: {
+        ...current.studySession,
+        currentQuestId: null,
+        startedAt: null,
+      },
       town: {
         ...current.town,
         growth: clampPercent(current.town.growth + 2),
@@ -759,6 +783,8 @@ export default function App() {
               setTimerRunning={setTimerRunning}
               recordTimer={recordTimer}
               resetTimer={resetTimer}
+              selectedQuest={selectedQuest}
+              startQuest={startQuest}
               progressMode={progressMode}
               setProgressMode={setProgressMode}
               townStage={townStage}
@@ -771,11 +797,22 @@ export default function App() {
               quests={visibleQuests}
               questFilter={questFilter}
               setQuestFilter={setQuestFilter}
-              completeQuest={completeQuest}
+              startQuest={startQuest}
               jsonText={jsonText}
               setJsonText={setJsonText}
               importStudyJson={importStudyJson}
               importError={importError}
+            />
+          )}
+          {tab === "timer" && (
+            <TimerScreen
+              selectedQuest={selectedQuest}
+              timerSeconds={state.timer?.elapsedSeconds || 0}
+              timerRunning={Boolean(state.timer?.running)}
+              setTimerRunning={setTimerRunning}
+              recordTimer={recordTimer}
+              resetTimer={resetTimer}
+              setTab={setTab}
             />
           )}
           {tab === "room" && (
@@ -843,11 +880,23 @@ function formatTimer(totalSeconds) {
   return `${minutes}:${seconds}`;
 }
 
-function createScanDraft(state) {
+function purposeForQuest(quest) {
+  if (!quest) return "宿題";
+  if (quest.type === "recovery") return "テスト勉強";
+  if (quest.type === "free") return "自由学習";
+  if (quest.type === "sub") return "チャレンジ";
+  return "宿題";
+}
+
+function createScanDraft(state, quest = null) {
   const timerMinutes = Math.floor((state.timer?.elapsedSeconds || 0) / 60);
+  const isFree = quest?.type === "free";
   return {
-    subject: "英語",
-    purpose: "宿題",
+    questId: quest?.id || null,
+    questTitle: quest?.title || "",
+    questType: quest?.type || "free",
+    subject: quest && !isFree ? quest.subject : "英語",
+    purpose: purposeForQuest(quest),
     studyMinutes: Math.max(5, timerMinutes),
     driveUrl: "",
     driveRootName: state.settings.driveRootName || "勉強RPG（たま）",
@@ -872,7 +921,7 @@ function createScanAnalysis(draft) {
   return {
     subject: draft.subject,
     purpose: draft.purpose,
-    tasks: Array.from(new Set([...tasks, ...memoTasks])).slice(0, 5),
+    tasks: Array.from(new Set([draft.questTitle, ...tasks, ...memoTasks].filter(Boolean))).slice(0, 5),
     weakPoint: draft.weakPoint || (draft.purpose === "テスト勉強" ? `${draft.subject}の復習ポイント` : ""),
     summary: `${draft.subject}の${draft.purpose}を、今日のクエストに変えました。`,
   };
@@ -956,7 +1005,6 @@ function Badge({ icon, value }) {
 function HomeScreen({
   state,
   activeQuests,
-  completeQuest,
   testDays,
   workProgress,
   totalStudyMinutes,
@@ -965,6 +1013,8 @@ function HomeScreen({
   setTimerRunning,
   recordTimer,
   resetTimer,
+  selectedQuest,
+  startQuest,
   progressMode,
   setProgressMode,
   townStage,
@@ -997,20 +1047,20 @@ function HomeScreen({
         <Panel className="quest-panel ribbon-panel">
           <h2>今日のクエスト</h2>
           {daily.map((quest) => (
-            <button className="quest-row" type="button" key={quest.id} onClick={() => completeQuest(quest.id)}>
+            <button className="quest-row" type="button" key={quest.id} onClick={() => startQuest(quest.id)}>
               <img src={asset(quest.icon)} alt="" />
               <span className="quest-copy">
                 <strong>{quest.title}</strong>
                 <small>XP {quest.xp}　🪙 {quest.coin}</small>
               </span>
-              <b>✓</b>
+              <b>▶</b>
             </button>
           ))}
         </Panel>
         {recovery && (
           <Panel className="recovery-card">
             <h3>リカバリークエスト</h3>
-            <button type="button" onClick={() => completeQuest(recovery.id)}>
+            <button type="button" onClick={() => startQuest(recovery.id)}>
               <span>🔥</span>
               <strong>{recovery.title}</strong>
               <small>+{recovery.xp} XP　+{recovery.coin} 🪙</small>
@@ -1025,11 +1075,13 @@ function HomeScreen({
           <Panel className="timer-card">
             <b>{totalStudyMinutes}<small>分</small></b>
             <span>今日の勉強時間</span>
+            <small className="active-session-label">{selectedQuest ? `選択中: ${selectedQuest.title}` : "クエストを選ぶとタイマーへ進めます"}</small>
             <strong className="timer-display">{formatTimer(timerSeconds)}</strong>
             <div className="timer-actions">
-              <button type="button" onClick={() => setTimerRunning(!timerRunning)}>{timerRunning ? "一時停止" : "スタート"}</button>
+              <button type="button" onClick={() => selectedQuest ? setTimerRunning(!timerRunning) : startQuest("free-study")}>{timerRunning ? "一時停止" : "スタート"}</button>
               <button type="button" onClick={recordTimer}>終了して成果スキャン</button>
               <button type="button" onClick={resetTimer}>リセット</button>
+              <button type="button" onClick={() => setTab("quests")}>クエストを選ぶ</button>
             </div>
           </Panel>
           <Panel className="progress-mode-card">
@@ -1110,7 +1162,7 @@ function LeefelFigure({ className = "", variant = "default", debugMode = "off" }
   );
 }
 
-function QuestScreen({ quests, questFilter, setQuestFilter, completeQuest, jsonText, setJsonText, importStudyJson, importError }) {
+function QuestScreen({ quests, questFilter, setQuestFilter, startQuest, jsonText, setJsonText, importStudyJson, importError }) {
   return (
     <div className="content-grid two-col">
       <Panel className="list-panel">
@@ -1119,15 +1171,65 @@ function QuestScreen({ quests, questFilter, setQuestFilter, completeQuest, jsonT
           <article className="quest-detail-row" key={quest.id}>
             <img src={asset(quest.icon)} alt="" />
             <div><h3>{quest.title}</h3><p>{quest.subject}　XP {quest.xp}　🪙 {quest.coin}</p></div>
-            <button className="primary-button" onClick={() => completeQuest(quest.id)}>完了</button>
+            <button className="primary-button" onClick={() => startQuest(quest.id)}>選んでタイマーへ</button>
           </article>
         ))}
+        {!quests.length && <p className="empty-note">この棚のクエストは今は空だよ。フリーから好きな勉強を記録できます。</p>}
       </Panel>
       <Panel className="import-panel">
         <h2>ChatGPT Project から記録を貼る</h2>
         <textarea value={jsonText} onChange={(event) => setJsonText(event.target.value)} placeholder='{"date":"2026-05-06","studyMinutes":75,...}' />
         {importError && <p className="error-text">{importError}</p>}
         <button className="primary-button" onClick={importStudyJson}>記録を世界に反映</button>
+      </Panel>
+    </div>
+  );
+}
+
+function TimerScreen({ selectedQuest, timerSeconds, timerRunning, setTimerRunning, recordTimer, resetTimer, setTab }) {
+  return (
+    <div className="content-grid timer-screen-grid">
+      <Panel className="timer-focus-panel">
+        <p className="eyebrow">勉強タイマー</p>
+        <h1>{selectedQuest ? selectedQuest.title : "クエストを選んで始めよう"}</h1>
+        {selectedQuest ? (
+          <div className="timer-quest-summary">
+            <img src={asset(selectedQuest.icon)} alt="" />
+            <div>
+              <span>{selectedQuest.type === "free" ? "フリー記録" : `${selectedQuest.subject} / ${questTypes.find((type) => type.id === selectedQuest.type)?.label || "クエスト"}`}</span>
+              <strong>XP {selectedQuest.xp}　🪙 {selectedQuest.coin}</strong>
+            </div>
+          </div>
+        ) : (
+          <p>おすすめクエストか「フリー」を選ぶと、タイマーと成果スキャンに進めます。</p>
+        )}
+        <div className="timer-orb" aria-label="タイマー">{formatTimer(timerSeconds)}</div>
+        <div className="timer-main-actions">
+          <button className="primary-button" type="button" onClick={() => setTimerRunning(!timerRunning)} disabled={!selectedQuest}>
+            {timerRunning ? "少し休む" : "タイマー開始"}
+          </button>
+          <button className="primary-button pink" type="button" onClick={recordTimer} disabled={!selectedQuest}>
+            終了して成果を写真にとる
+          </button>
+          <button className="danger-button subtle" type="button" onClick={resetTimer} disabled={!selectedQuest && !timerSeconds}>
+            リセット
+          </button>
+        </div>
+      </Panel>
+      <Panel className="study-flow-panel">
+        <h2>今日の流れ</h2>
+        <ol className="study-flow-list">
+          <li className={selectedQuest ? "done" : ""}><b>1</b><span>クエストを選ぶ</span></li>
+          <li className={timerRunning || timerSeconds > 0 ? "done" : ""}><b>2</b><span>タイマーで勉強する</span></li>
+          <li><b>3</b><span>成果を写真/PDFで残す</span></li>
+          <li><b>4</b><span>AI解析JSONを保存する</span></li>
+          <li><b>5</b><span>解説をリーフェルGPTに聞く</span></li>
+        </ol>
+        <div className="flow-note-card">
+          <strong>フリー記録もOK</strong>
+          <p>おすすめ以外の勉強は、クエスト画面の「フリー」から始めて、スキャン画面で教科と目的を選べます。</p>
+        </div>
+        <button className="book-link" type="button" onClick={() => setTab("quests")}>クエストを選び直す</button>
       </Panel>
     </div>
   );
@@ -1416,6 +1518,7 @@ function ResultModal({ draft, leefelDebugBackdrop = "off", onChange, onFiles, on
           <div>
             <p className="eyebrow">タイマー終了</p>
             <h2>📚 今日の成果をスキャン！</h2>
+            {draft.questTitle && <small className="result-quest-label">選んだクエスト: {draft.questTitle}</small>}
           </div>
           <button onClick={onClose}>×</button>
         </div>
@@ -1441,7 +1544,7 @@ function ResultModal({ draft, leefelDebugBackdrop = "off", onChange, onFiles, on
               <span>スキャン前に選択</span>
               <strong>{drivePath}</strong>
               <small>保存先: {outputPaths.submission}</small>
-              <button type="button" onClick={onOpenDrive}>Google Driveフォルダを開く</button>
+              <button type="button" onClick={onOpenDrive}>Google Driveで成果を追加</button>
             </div>
             <label>今日の分数
               <input type="number" min="0" value={draft.studyMinutes} onChange={(event) => onChange({ studyMinutes: Number(event.target.value) })} />
@@ -1449,7 +1552,7 @@ function ResultModal({ draft, leefelDebugBackdrop = "off", onChange, onFiles, on
             <label>Google Drive 教材URL
               <input value={draft.driveUrl} onChange={(event) => onChange({ driveUrl: event.target.value })} placeholder="共有リンクを貼る" />
             </label>
-            <label>写真 / PDF
+            <label>成果写真 / PDF
               <input type="file" accept="image/*,.pdf" multiple onChange={(event) => onFiles(event.target.files)} />
             </label>
             <label>メモ
@@ -1474,7 +1577,7 @@ function ResultModal({ draft, leefelDebugBackdrop = "off", onChange, onFiles, on
             <pre>{JSON.stringify(preview, null, 2)}</pre>
             <div className="scan-actions">
               <button className="primary-button" type="button" onClick={onSave} disabled={draft.saved}>{draft.saved ? "保存済み" : "XP・コインに保存"}</button>
-              <button className="primary-button pink" type="button" onClick={onAskLeefel}>わからないところ聞く？</button>
+              <button className="primary-button pink" type="button" onClick={onAskLeefel}>解説を聞く</button>
             </div>
             <p>ボタンを押すとJSONをコピーして、設定したChatGPT Projectへ移動します。</p>
           </div>

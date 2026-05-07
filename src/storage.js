@@ -66,6 +66,7 @@ function mergeState(base, saved) {
     player: { ...base.player, ...saved.player },
     settings,
     avatar: { ...base.avatar, ...saved.avatar },
+    studySession: { ...base.studySession, ...(saved.studySession || {}) },
     inventory: {
       ...base.inventory,
       ...saved.inventory,

@@ -7,6 +7,7 @@ export const questTypes = [
   { id: "main", label: "メイン" },
   { id: "sub", label: "サブ" },
   { id: "recovery", label: "リカバリー" },
+  { id: "free", label: "フリー" },
 ];
 
 export const initialQuests = [
@@ -49,6 +50,16 @@ export const initialQuests = [
     coin: 10,
     icon: "quest-science.png",
     material: "petal",
+  },
+  {
+    id: "free-study",
+    type: "free",
+    subject: "フリー",
+    title: "好きな勉強を記録する",
+    xp: 20,
+    coin: 10,
+    icon: "nav-quest.png",
+    material: "leaf",
   },
 ];
 
@@ -140,6 +151,10 @@ export function createInitialState() {
     timer: {
       running: false,
       elapsedSeconds: 0,
+    },
+    studySession: {
+      currentQuestId: null,
+      startedAt: null,
     },
     quests: initialQuests.map((quest) => ({ ...quest, status: "active" })),
     completedLog: [],
