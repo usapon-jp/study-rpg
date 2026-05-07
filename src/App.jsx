@@ -11,7 +11,7 @@ import {
 } from "./gameData";
 import { roomItems } from "./data/roomItems";
 import { townObjects } from "./data/townObjects";
-import { avatarBaseLayers, avatarItems, avatarLayerOrder, leefelAssets } from "./data/items";
+import { leefelAssets } from "./data/items";
 import { loadState, saveState } from "./storage";
 
 const rarityWeight = { N: 70, R: 25, SR: 5 };
@@ -79,7 +79,8 @@ function isWearableOutfit(item) {
 
 function activeOutfitItem(state) {
   const owned = new Set(state.inventory?.outfits || []);
-  const selected = gachaPool.find((item) => item.id === state.avatar?.outfit && isWearableOutfit(item));
+  const selectedId = state.avatar?.selectedOutfitId || state.avatar?.outfit;
+  const selected = gachaPool.find((item) => item.id === selectedId && isWearableOutfit(item));
   if (selected && owned.has(selected.id)) return selected;
   return gachaPool.find((item) => owned.has(item.id) && isWearableOutfit(item)) || gachaPool.find((item) => item.id === "outfit-sr-1");
 }
@@ -92,17 +93,6 @@ function outfitTone(outfitId = "") {
   if (outfitId.includes("n-3")) return "earth";
   if (outfitId.includes("sr-1")) return "forest";
   return "leaf";
-}
-
-function avatarLayersForState(state) {
-  const outfit = activeOutfitItem(state);
-  const layers = [...avatarBaseLayers];
-  const outfitLayer = avatarItems.find((item) => item.id === outfit?.id);
-  if (outfitLayer) layers.push(outfitLayer);
-  const accessoryId = state.avatar?.accessory?.startsWith("accessory-") ? state.avatar.accessory : `accessory-${state.avatar?.accessory || "flower-pin"}`;
-  const accessoryLayer = avatarItems.find((item) => item.id === accessoryId);
-  if (accessoryLayer) layers.push(accessoryLayer);
-  return layers.sort((a, b) => avatarLayerOrder.indexOf(a.slot) - avatarLayerOrder.indexOf(b.slot));
 }
 
 function surfaceTone(value, kind) {
@@ -480,7 +470,12 @@ export default function App() {
     }
     updateState((current) => ({
       ...current,
-      avatar: { ...current.avatar, outfit: item.id },
+      avatar: {
+        ...current.avatar,
+        selectedOutfitId: item.id,
+        outfit: item.id,
+        centralCharacterImage: item.fullImage,
+      },
     }));
     setToast(`${item.name}に着替えたよ`);
   }
@@ -1137,19 +1132,11 @@ function HomeScreen({
 function AvatarFigure({ state, className = "", showOutfitName = false }) {
   const outfit = activeOutfitItem(state);
   const tone = outfitTone(outfit?.id);
-  const layers = avatarLayersForState(state);
+  const fullImage = outfit?.fullImage || state.avatar?.centralCharacterImage || "avatar/full/outfit-sr-1.png";
   return (
     <figure className={`avatar-figure outfit-${tone} ${className}`} data-rarity={outfit?.rarity || "N"}>
       <span className="avatar-aura" />
-      {layers.map((layer) => (
-        <img
-          key={layer.id}
-          src={asset(layer.src)}
-          alt={layer.slot === "body" ? "主人公" : ""}
-          className={`avatar-layer avatar-slot-${layer.slot}`}
-          style={{ "--offset-x": `${layer.offsetX || 0}px`, "--offset-y": `${layer.offsetY || 0}px` }}
-        />
-      ))}
+      <img src={asset(fullImage)} alt="主人公" className="avatar-full-image" />
       {showOutfitName && outfit && <figcaption>{outfit.name}</figcaption>}
     </figure>
   );
@@ -1433,7 +1420,7 @@ function WardrobeScreen({ state, equipOutfit }) {
   const ownedItems = gachaPool.filter((item) => state.inventory.outfits.includes(item.id));
   const wearableItems = ownedItems.filter(isWearableOutfit);
   const activeItem = activeOutfitItem(state);
-  const activeOutfit = activeItem?.id;
+  const activeOutfit = state.avatar?.selectedOutfitId || activeItem?.id;
   return (
     <div className="content-grid two-col wardrobe-screen">
       <Panel className="wardrobe-preview-panel">
@@ -1443,7 +1430,7 @@ function WardrobeScreen({ state, equipOutfit }) {
           <AvatarFigure state={state} className="wardrobe-protagonist" showOutfitName />
           {activeItem && (
             <div className="wardrobe-current">
-              <img src={asset(activeItem.icon)} alt="" />
+              <img src={asset(activeItem.fullImage || activeItem.icon)} alt="" />
               <span>{activeItem.rarity}</span>
               <strong>{activeItem.name}</strong>
             </div>
@@ -1453,15 +1440,35 @@ function WardrobeScreen({ state, equipOutfit }) {
       <Panel className="wardrobe-list-panel">
         <div className="panel-head"><h2>服を選ぶ</h2><span>{wearableItems.length}点</span></div>
         <div className="wardrobe-grid">
-          {wearableItems.map((item) => (
-            <article className={`wardrobe-card rarity-${item.rarity.toLowerCase()} ${item.id === activeOutfit ? "active" : ""}`} key={item.id}>
-              <img src={asset(item.icon)} alt="" />
-              <span>{item.rarity}</span>
-              <strong>{item.name}</strong>
-              <small>{item.type}</small>
-              <button type="button" onClick={() => equipOutfit(item)}>{item.id === activeOutfit ? "着用中" : "着る"}</button>
-            </article>
-          ))}
+          {wearableItems.map((item) => {
+            const isActive = item.id === activeOutfit;
+            return (
+              <article
+                className={`wardrobe-card rarity-${item.rarity.toLowerCase()} ${isActive ? "active" : ""}`}
+                key={item.id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isActive}
+                onClick={() => !isActive && equipOutfit(item)}
+                onKeyDown={(event) => {
+                  if ((event.key === "Enter" || event.key === " ") && !isActive) {
+                    event.preventDefault();
+                    equipOutfit(item);
+                  }
+                }}
+              >
+                <img src={asset(item.fullImage || item.icon)} alt="" />
+                <span>{item.rarity}</span>
+                <strong>{item.name}</strong>
+                <small>{item.type}</small>
+                {isActive ? (
+                  <b className="wearing-badge">✓ 着用中</b>
+                ) : (
+                  <span className="try-on-button">試着する</span>
+                )}
+              </article>
+            );
+          })}
           {!wearableItems.length && <p className="empty-note">ごほうびクローゼットで服を集めると、ここで着替えられるよ。</p>}
         </div>
       </Panel>

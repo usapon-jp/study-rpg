@@ -64,15 +64,15 @@ export const initialQuests = [
 ];
 
 export const gachaPool = [
-  { id: "outfit-n-1", name: "若葉の通学ワンピ", rarity: "N", type: "衣装", icon: "outfit-n-1.png" },
-  { id: "outfit-n-2", name: "花色カーデコーデ", rarity: "N", type: "衣装", icon: "outfit-n-2.png" },
-  { id: "outfit-n-3", name: "小さな庭仕事服", rarity: "N", type: "衣装", icon: "outfit-n-3.png" },
-  { id: "outfit-r-1", name: "青空リボンドレス", rarity: "R", type: "衣装", icon: "outfit-r-1.png" },
-  { id: "outfit-r-2", name: "星待ちラベンダー", rarity: "R", type: "衣装", icon: "outfit-r-2.png" },
-  { id: "outfit-r-3", name: "夜色の魔法使い", rarity: "R", type: "衣装", icon: "outfit-r-3.png" },
-  { id: "outfit-sr-1", name: "森の祝福ドレス", rarity: "SR", type: "特別コーデ", icon: "outfit-sr-1.png" },
-  { id: "outfit-sr-2", name: "水色星花ドレス", rarity: "SR", type: "特別コーデ", icon: "outfit-sr-2.png" },
-  { id: "outfit-sr-3", name: "春霞の花冠ドレス", rarity: "SR", type: "特別コーデ", icon: "outfit-sr-3.png" },
+  { id: "outfit-n-1", name: "若葉の通学ワンピ", rarity: "N", type: "衣装", icon: "outfit-n-1.png", fullImage: "avatar/full/outfit-n-1.png" },
+  { id: "outfit-n-2", name: "花色カーデコーデ", rarity: "N", type: "衣装", icon: "outfit-n-2.png", fullImage: "avatar/full/outfit-n-2.png" },
+  { id: "outfit-n-3", name: "小さな庭仕事服", rarity: "N", type: "衣装", icon: "outfit-n-3.png", fullImage: "avatar/full/outfit-n-3.png" },
+  { id: "outfit-r-1", name: "青空リボンドレス", rarity: "R", type: "衣装", icon: "outfit-r-1.png", fullImage: "avatar/full/outfit-r-1.png" },
+  { id: "outfit-r-2", name: "星待ちラベンダー", rarity: "R", type: "衣装", icon: "outfit-r-2.png", fullImage: "avatar/full/outfit-r-2.png" },
+  { id: "outfit-r-3", name: "夜色の魔法使い", rarity: "R", type: "衣装", icon: "outfit-r-3.png", fullImage: "avatar/full/outfit-r-3.png" },
+  { id: "outfit-sr-1", name: "森の祝福ドレス", rarity: "SR", type: "特別コーデ", icon: "outfit-sr-1.png", fullImage: "avatar/full/outfit-sr-1.png" },
+  { id: "outfit-sr-2", name: "水色星花ドレス", rarity: "SR", type: "特別コーデ", icon: "outfit-sr-2.png", fullImage: "avatar/full/outfit-sr-2.png" },
+  { id: "outfit-sr-3", name: "春霞の花冠ドレス", rarity: "SR", type: "特別コーデ", icon: "outfit-sr-3.png", fullImage: "avatar/full/outfit-sr-3.png" },
   { id: "hair-leaf-braid", name: "リーフ三つ編み", rarity: "R", type: "髪型", icon: "outfit-r-1.png" },
   { id: "accessory-flower-pin", name: "小花の髪飾り", rarity: "N", type: "アクセサリー", icon: "material-petal.png" },
   { id: "accessory-moon-ribbon", name: "月しずくリボン", rarity: "SR", type: "アクセサリー", icon: "material-moon-dust.png" },
@@ -142,6 +142,8 @@ export function createInitialState() {
       leefelDebugBackdrop: "off",
     },
     avatar: {
+      selectedOutfitId: "outfit-sr-1",
+      centralCharacterImage: "avatar/full/outfit-sr-1.png",
       outfit: "outfit-sr-1",
       hair: "leaf-brown",
       eye: "warm-brown",

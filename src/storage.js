@@ -41,8 +41,27 @@ function normalizeTownObjects(baseObjects, savedObjects) {
   })).filter((item) => item.itemId);
 }
 
+function mergeArrayUnique(baseItems = [], savedItems = []) {
+  return Array.from(new Set([...baseItems, ...savedItems]));
+}
+
+function normalizeQuests(baseQuests = [], savedQuests = []) {
+  if (!Array.isArray(savedQuests)) return baseQuests;
+  const savedById = new Map(savedQuests.map((quest) => [quest.id, quest]));
+  const baseIds = new Set(baseQuests.map((quest) => quest.id));
+  return [
+    ...baseQuests.map((quest) => {
+      const savedQuest = savedById.get(quest.id);
+      return savedQuest ? { ...quest, status: savedQuest.status || quest.status } : quest;
+    }),
+    ...savedQuests.filter((quest) => quest?.id && !baseIds.has(quest.id)),
+  ];
+}
+
 function mergeState(base, saved) {
   const savedSettings = saved.settings || {};
+  const savedAvatar = saved.avatar || {};
+  const selectedOutfitId = savedAvatar.selectedOutfitId || savedAvatar.outfit || base.avatar.selectedOutfitId;
   const settings = {
     ...base.settings,
     ...savedSettings,
@@ -65,11 +84,20 @@ function mergeState(base, saved) {
     ...saved,
     player: { ...base.player, ...saved.player },
     settings,
-    avatar: { ...base.avatar, ...saved.avatar },
+    avatar: {
+      ...base.avatar,
+      ...savedAvatar,
+      selectedOutfitId,
+      outfit: selectedOutfitId,
+      centralCharacterImage: savedAvatar.centralCharacterImage || `avatar/full/${selectedOutfitId}.png`,
+    },
+    quests: normalizeQuests(base.quests, saved.quests),
     studySession: { ...base.studySession, ...(saved.studySession || {}) },
     inventory: {
       ...base.inventory,
       ...saved.inventory,
+      outfits: mergeArrayUnique(base.inventory.outfits, saved.inventory?.outfits || []),
+      furniture: mergeArrayUnique(base.inventory.furniture, saved.inventory?.furniture || []),
       materials: { ...base.inventory.materials, ...(saved.inventory?.materials || {}) },
     },
     room: {
