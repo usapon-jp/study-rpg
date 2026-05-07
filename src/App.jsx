@@ -206,7 +206,9 @@ function driveOutputPathsFor(draft) {
 }
 
 function driveSearchUrl(draft) {
-  return `https://drive.google.com/drive/search?q=${encodeURIComponent(`${draft.subject} ${draft.purpose}`)}`;
+  const root = draft.driveRootName || "勉強RPG（たま）";
+  const query = [root, draft.subject || subjectOptions[0], draft.purpose || purposeOptions[0]].filter(Boolean).join(" ");
+  return `https://drive.google.com/drive/search?q=${encodeURIComponent(query)}`;
 }
 
 function clampPercent(value) {
@@ -704,7 +706,7 @@ export default function App() {
 
   function openDriveFolder() {
     const draft = scanDraft || createScanDraft(state);
-    window.open(draft.driveUrl || draft.driveRootUrl || driveSearchUrl(draft), "_blank", "noopener,noreferrer");
+    window.open(draft.driveUrl || driveSearchUrl(draft), "_blank", "noopener,noreferrer");
   }
 
   function saveScanResult() {
@@ -947,7 +949,7 @@ function buildScanJson(draft, analysis = createScanAnalysis(draft)) {
       path: drivePathFor(draft),
       outputPaths: driveOutputPathsFor(draft),
       rootUrl: draft.driveRootUrl || "",
-      url: draft.driveUrl || draft.driveRootUrl || driveSearchUrl(draft),
+      url: draft.driveUrl || driveSearchUrl(draft),
     },
     evidence: {
       driveUrl: draft.driveUrl,
@@ -1022,7 +1024,9 @@ function HomeScreen({
   setDialogueOpen,
 }) {
   const [leefelTipOpen, setLeefelTipOpen] = useState(false);
-  const daily = activeQuests.slice(0, 3);
+  const freeQuest = activeQuests.find((quest) => quest.type === "free");
+  const dailyBase = activeQuests.filter((quest) => quest.type !== "recovery" && quest.type !== "free").slice(0, 2);
+  const daily = freeQuest ? [...dailyBase, freeQuest] : dailyBase;
   const recovery = activeQuests.find((quest) => quest.type === "recovery");
   const weekGoalMinutes = 420;
   const weekProgress = clampPercent((totalStudyMinutes / weekGoalMinutes) * 100);
@@ -1544,7 +1548,7 @@ function ResultModal({ draft, leefelDebugBackdrop = "off", onChange, onFiles, on
               <span>スキャン前に選択</span>
               <strong>{drivePath}</strong>
               <small>保存先: {outputPaths.submission}</small>
-              <button type="button" onClick={onOpenDrive}>Google Driveで成果を追加</button>
+              <button type="button" onClick={onOpenDrive}>教科/目的でDriveを開く</button>
             </div>
             <label>今日の分数
               <input type="number" min="0" value={draft.studyMinutes} onChange={(event) => onChange({ studyMinutes: Number(event.target.value) })} />
