@@ -11,6 +11,7 @@ import {
 } from "./gameData";
 import { roomItems } from "./data/roomItems";
 import { townObjects } from "./data/townObjects";
+import { avatarBaseLayers, avatarItems, avatarLayerOrder, leefelAssets } from "./data/items";
 import { loadState, saveState } from "./storage";
 
 const rarityWeight = { N: 70, R: 25, SR: 5 };
@@ -70,6 +71,38 @@ function itemIcon(item) {
     sign_guide_01: "nav-town.png",
   };
   return iconFallbacks[itemKey(item)] || item.icon;
+}
+
+function isWearableOutfit(item) {
+  return item?.type === "衣装" || item?.type === "特別コーデ";
+}
+
+function activeOutfitItem(state) {
+  const owned = new Set(state.inventory?.outfits || []);
+  const selected = gachaPool.find((item) => item.id === state.avatar?.outfit && isWearableOutfit(item));
+  if (selected && owned.has(selected.id)) return selected;
+  return gachaPool.find((item) => owned.has(item.id) && isWearableOutfit(item)) || gachaPool.find((item) => item.id === "outfit-sr-1");
+}
+
+function outfitTone(outfitId = "") {
+  if (outfitId.includes("sr-2") || outfitId.includes("r-1")) return "aqua";
+  if (outfitId.includes("sr-3") || outfitId.includes("n-2")) return "rose";
+  if (outfitId.includes("r-2")) return "lavender";
+  if (outfitId.includes("r-3")) return "night";
+  if (outfitId.includes("n-3")) return "earth";
+  if (outfitId.includes("sr-1")) return "forest";
+  return "leaf";
+}
+
+function avatarLayersForState(state) {
+  const outfit = activeOutfitItem(state);
+  const layers = [...avatarBaseLayers];
+  const outfitLayer = avatarItems.find((item) => item.id === outfit?.id);
+  if (outfitLayer) layers.push(outfitLayer);
+  const accessoryId = state.avatar?.accessory?.startsWith("accessory-") ? state.avatar.accessory : `accessory-${state.avatar?.accessory || "flower-pin"}`;
+  const accessoryLayer = avatarItems.find((item) => item.id === accessoryId);
+  if (accessoryLayer) layers.push(accessoryLayer);
+  return layers.sort((a, b) => avatarLayerOrder.indexOf(a.slot) - avatarLayerOrder.indexOf(b.slot));
 }
 
 function surfaceTone(value, kind) {
@@ -422,6 +455,10 @@ export default function App() {
   }
 
   function equipOutfit(item) {
+    if (!isWearableOutfit(item)) {
+      setToast("服は衣装カードから着替えられるよ");
+      return;
+    }
     updateState((current) => ({
       ...current,
       avatar: { ...current.avatar, outfit: item.id },
@@ -773,6 +810,7 @@ export default function App() {
       {resultOpen && (
         <ResultModal
           draft={scanDraft || createScanDraft(state)}
+          leefelDebugBackdrop={state.settings.leefelDebugBackdrop}
           onChange={updateScanDraft}
           onFiles={updateScanFiles}
           onScan={scanStudyResult}
@@ -1006,10 +1044,10 @@ function HomeScreen({
         </div>
       </aside>
       <div className="hero-stage">
-        <img src={asset("protagonist.png")} alt="主人公" className="protagonist" />
+        <AvatarFigure state={state} className="protagonist" />
         <button type="button" className="leefel-button" onClick={() => setLeefelTipOpen((open) => !open)} onDoubleClick={() => setDialogueOpen(true)} aria-label="リーフェルに話しかける">
           <span className={`speech ${leefelTipOpen ? "is-visible" : ""}`}>今日もがんばったね！<br />一緒に町を育てていこう♪</span>
-          <img src={asset("leefel.png")} alt="リーフェル" className="leefel" />
+          <LeefelFigure className="leefel" debugMode={state.settings.leefelDebugBackdrop} />
         </button>
       </div>
       <aside className="right-stack">
@@ -1037,6 +1075,38 @@ function HomeScreen({
         <strong>あと {testDays} 日</strong>
       </div>
     </div>
+  );
+}
+
+function AvatarFigure({ state, className = "", showOutfitName = false }) {
+  const outfit = activeOutfitItem(state);
+  const tone = outfitTone(outfit?.id);
+  const layers = avatarLayersForState(state);
+  return (
+    <figure className={`avatar-figure outfit-${tone} ${className}`} data-rarity={outfit?.rarity || "N"}>
+      <span className="avatar-aura" />
+      {layers.map((layer) => (
+        <img
+          key={layer.id}
+          src={asset(layer.src)}
+          alt={layer.slot === "body" ? "主人公" : ""}
+          className={`avatar-layer avatar-slot-${layer.slot}`}
+          style={{ "--offset-x": `${layer.offsetX || 0}px`, "--offset-y": `${layer.offsetY || 0}px` }}
+        />
+      ))}
+      {showOutfitName && outfit && <figcaption>{outfit.name}</figcaption>}
+    </figure>
+  );
+}
+
+function LeefelFigure({ className = "", variant = "default", debugMode = "off" }) {
+  const leefel = leefelAssets[variant] || leefelAssets.default;
+  return (
+    <figure className={`leefel-figure ${className}`} data-debug={debugMode}>
+      <span className="leefel-center-guide" />
+      <span className="leefel-foot-guide" />
+      <img src={asset(leefel.src)} alt="リーフェル" className="leefel-layer" />
+    </figure>
   );
 }
 
@@ -1255,15 +1325,16 @@ function GachaScreen({ state, runGacha, gachaResults, gachaEffect, onSkipGacha }
 
 function WardrobeScreen({ state, equipOutfit }) {
   const ownedItems = gachaPool.filter((item) => state.inventory.outfits.includes(item.id));
-  const activeOutfit = state.avatar?.outfit || ownedItems[0]?.id;
-  const activeItem = gachaPool.find((item) => item.id === activeOutfit) || ownedItems[0];
+  const wearableItems = ownedItems.filter(isWearableOutfit);
+  const activeItem = activeOutfitItem(state);
+  const activeOutfit = activeItem?.id;
   return (
     <div className="content-grid two-col wardrobe-screen">
       <Panel className="wardrobe-preview-panel">
         <p className="eyebrow">お着替えルーム</p>
         <h2>今日のコーデ</h2>
         <div className="wardrobe-preview">
-          <img src={asset("protagonist.png")} alt="" className="wardrobe-protagonist" />
+          <AvatarFigure state={state} className="wardrobe-protagonist" showOutfitName />
           {activeItem && (
             <div className="wardrobe-current">
               <img src={asset(activeItem.icon)} alt="" />
@@ -1274,9 +1345,9 @@ function WardrobeScreen({ state, equipOutfit }) {
         </div>
       </Panel>
       <Panel className="wardrobe-list-panel">
-        <div className="panel-head"><h2>持っている衣装</h2><span>{ownedItems.length}点</span></div>
+        <div className="panel-head"><h2>服を選ぶ</h2><span>{wearableItems.length}点</span></div>
         <div className="wardrobe-grid">
-          {ownedItems.map((item) => (
+          {wearableItems.map((item) => (
             <article className={`wardrobe-card rarity-${item.rarity.toLowerCase()} ${item.id === activeOutfit ? "active" : ""}`} key={item.id}>
               <img src={asset(item.icon)} alt="" />
               <span>{item.rarity}</span>
@@ -1285,6 +1356,7 @@ function WardrobeScreen({ state, equipOutfit }) {
               <button type="button" onClick={() => equipOutfit(item)}>{item.id === activeOutfit ? "着用中" : "着る"}</button>
             </article>
           ))}
+          {!wearableItems.length && <p className="empty-note">ごほうびクローゼットで服を集めると、ここで着替えられるよ。</p>}
         </div>
       </Panel>
     </div>
@@ -1312,6 +1384,14 @@ function SettingsScreen({ state, updateState, resetGame }) {
         <label>完了ページ<input type="number" value={settings.workDonePages} onChange={(e) => setSetting("workDonePages", Number(e.target.value))} /></label>
         <label>総ページ<input type="number" value={settings.workTotalPages} onChange={(e) => setSetting("workTotalPages", Number(e.target.value))} /></label>
         <label>リーフェルGPT URL<input value={settings.leefelProjectUrl || ""} onChange={(e) => setSetting("leefelProjectUrl", e.target.value)} placeholder="https://chatgpt.com/g/..." /></label>
+        <label>リーフェル輪郭確認
+          <select value={settings.leefelDebugBackdrop || "off"} onChange={(e) => setSetting("leefelDebugBackdrop", e.target.value)}>
+            <option value="off">通常表示</option>
+            <option value="black">黒背景</option>
+            <option value="white">白背景</option>
+            <option value="checker">市松背景</option>
+          </select>
+        </label>
         <label>Driveルート名<input value={settings.driveRootName || ""} onChange={(e) => setSetting("driveRootName", e.target.value)} placeholder="勉強RPG（たま）" /></label>
         <label>Drive共有フォルダURL<input value={settings.driveRootUrl || ""} onChange={(e) => setSetting("driveRootUrl", e.target.value)} placeholder="https://drive.google.com/drive/folders/..." /></label>
       </Panel>
@@ -1324,7 +1404,7 @@ function SettingsScreen({ state, updateState, resetGame }) {
   );
 }
 
-function ResultModal({ draft, onChange, onFiles, onScan, onOpenDrive, onSave, onAskLeefel, onClose }) {
+function ResultModal({ draft, leefelDebugBackdrop = "off", onChange, onFiles, onScan, onOpenDrive, onSave, onAskLeefel, onClose }) {
   const preview = draft.generated || buildPreviewScanJson(draft);
   const analysis = draft.analysis || createScanAnalysis(draft);
   const drivePath = drivePathFor(draft);
@@ -1381,7 +1461,7 @@ function ResultModal({ draft, onChange, onFiles, onScan, onOpenDrive, onSave, on
             <button className="scan-main-button" type="button" onClick={onScan} disabled={draft.scanning}>{draft.scanning ? "AIが教材解析中..." : "今日の成果をスキャン！"}</button>
           </div>
           <div className="scan-preview">
-            <img src={asset("leefel.png")} alt="" />
+            <LeefelFigure className="scan-leefel" debugMode={leefelDebugBackdrop} />
             <div className="scan-flow">
               {["タイマー終了", "成果スキャン", "AIが教材解析", "クエスト化"].map((step, index) => <span key={step}>{index + 1}. {step}</span>)}
             </div>
@@ -1443,7 +1523,7 @@ function DialogueModal({ state, onClose }) {
   return (
     <div className="modal-backdrop">
       <section className="modal dialogue-modal">
-        <img src={asset("leefel.png")} alt="" />
+        <LeefelFigure className="dialogue-leefel" debugMode={state.settings.leefelDebugBackdrop} />
         <div><h2>リーフェル</h2><p>{line}</p><button className="primary-button" onClick={onClose}>ありがとう</button></div>
       </section>
     </div>
@@ -1452,9 +1532,10 @@ function DialogueModal({ state, onClose }) {
 
 function AvatarModal({ state, onSelect, onClose }) {
   const choices = [
+    { icon: activeOutfitItem(state)?.icon || "protagonist.png", label: "今のコーデ" },
     { icon: "protagonist.png", label: "主人公" },
     ...gachaPool.slice(0, 6).map((item) => ({ icon: item.icon, label: item.name })),
-    { icon: "leefel.png", label: "リーフェル" },
+    { icon: "avatar/leefel-default.png", label: "リーフェル" },
   ];
   return (
     <div className="modal-backdrop">

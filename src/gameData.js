@@ -1,4 +1,4 @@
-export const asset = (name) => `${import.meta.env.BASE_URL}assets/crops/${name}`;
+export const asset = (name) => `${import.meta.env.BASE_URL}assets/${name.includes("/") ? name : `crops/${name}`}`;
 
 export { roomItems, roomItemsById } from "./data/roomItems";
 export { townObjects, townObjectsById } from "./data/townObjects";
@@ -128,6 +128,7 @@ export function createInitialState() {
       leefelProjectUrl: "https://chatgpt.com/g/g-p-69fac7dd7ce48191a678da26f5caf56d-tamamian-qiang-rpg/project",
       driveRootName: "勉強RPG（たま）",
       driveRootUrl: "https://drive.google.com/drive/folders/1STT9K8fDtIyihAz5QVDD-l8YxdguCn7a",
+      leefelDebugBackdrop: "off",
     },
     avatar: {
       outfit: "outfit-sr-1",

@@ -28,8 +28,17 @@
 
 - マスターデータは `src/gameData.js` と `src/data/` に置き、進行状態は `createInitialState()` と保存レイヤーで分離します。
 - `src/data/roomItems.js` はマイルーム用、`src/data/townObjects.js` は町づくり用の配置アイテム定義です。
+- `src/data/items.js` はアバター用のslotレイヤー定義です。`id`、`slot`、`src`、`rarity`、`offsetX`、`offsetY` を持ち、将来Unityへ移す時も同じIDを使います。
 - 画像パスは `asset()` を通して `import.meta.env.BASE_URL` を使うため、GitHub Pages のサブパス配信でも参照が壊れにくい構成です。
 - 今後、家具、町、クエスト、素材などの定義はJSON化して、React UIとUnityの双方から読める形へ寄せます。
+
+### アバター / リーフェル素材
+
+- アバターとリーフェルの表示素材は `public/assets/avatar/` に 1024x1024 の完全透明PNGとして正規化します。
+- React側は `.avatar-layer` / `.leefel-layer` を `position: absolute` で重ね、レイヤーごとの画像サイズ差で位置がずれないようにしています。
+- 新規生成時の下地は白背景を避け、単色グリーンまたは単色ブルー背景にします。正規化時は外周に接続したグリーン/ブルー背景をCanvasマスク相当で透明化します。
+- 正規化は `npm run normalize:assets` で実行します。外周1pxと外周に接続した低アルファ/白フチノイズを落とし、足位置と中心線を固定します。
+- リーフェルは設定画面の「リーフェル輪郭確認」で黒背景、白背景、市松背景を切り替えられます。
 
 ### 将来の2.5D / Unity移植
 

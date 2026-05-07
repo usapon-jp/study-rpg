@@ -429,6 +429,161 @@ button {
   animation: breathe 4.6s ease-in-out infinite;
 }
 
+.avatar-figure {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  margin: 0;
+  overflow: visible;
+}
+
+.avatar-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: translate(var(--offset-x, 0), var(--offset-y, 0));
+  pointer-events: none;
+}
+
+.avatar-slot-body {
+  z-index: 1;
+}
+
+.avatar-slot-hairBack {
+  z-index: 2;
+}
+
+.avatar-slot-face {
+  z-index: 3;
+}
+
+.avatar-slot-tops {
+  z-index: 4;
+}
+
+.avatar-slot-bottoms {
+  z-index: 5;
+}
+
+.avatar-slot-shoes {
+  z-index: 6;
+}
+
+.avatar-slot-hairFront {
+  z-index: 7;
+}
+
+.avatar-slot-accessory {
+  z-index: 8;
+}
+
+.avatar-base {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.avatar-aura {
+  position: absolute;
+  inset: 16% 3% 2%;
+  z-index: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 55%, rgba(255, 249, 227, 0.58), transparent 58%);
+  filter: blur(12px);
+  opacity: 0.78;
+}
+
+.avatar-dress-tint {
+  position: absolute;
+  left: 50%;
+  top: 57%;
+  z-index: 3;
+  width: 55%;
+  height: 35%;
+  transform: translate(-50%, -50%);
+  clip-path: polygon(24% 0, 76% 0, 91% 100%, 8% 100%);
+  border-radius: 34% 34% 46% 46%;
+  background: linear-gradient(180deg, rgba(112, 143, 83, 0.22), rgba(214, 181, 96, 0.16));
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.avatar-outfit-layer {
+  position: absolute;
+  left: 50%;
+  top: 59%;
+  z-index: 4;
+  width: 42%;
+  max-height: 30%;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 9px 10px rgba(69, 48, 25, 0.16));
+  pointer-events: none;
+}
+
+.avatar-figure figcaption {
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  z-index: 5;
+  max-width: 78%;
+  padding: 7px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(214, 190, 145, 0.86);
+  border-radius: 999px;
+  background: rgba(255, 251, 239, 0.9);
+  color: var(--ink);
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.avatar-figure.outfit-aqua .avatar-dress-tint {
+  background: linear-gradient(180deg, rgba(111, 178, 204, 0.35), rgba(118, 159, 213, 0.18));
+}
+
+.avatar-figure.outfit-rose .avatar-dress-tint {
+  background: linear-gradient(180deg, rgba(221, 147, 166, 0.34), rgba(238, 190, 153, 0.18));
+}
+
+.avatar-figure.outfit-lavender .avatar-dress-tint {
+  background: linear-gradient(180deg, rgba(166, 141, 203, 0.34), rgba(205, 179, 223, 0.2));
+}
+
+.avatar-figure.outfit-night .avatar-dress-tint {
+  background: linear-gradient(180deg, rgba(58, 67, 103, 0.42), rgba(101, 86, 132, 0.24));
+}
+
+.avatar-figure.outfit-earth .avatar-dress-tint {
+  background: linear-gradient(180deg, rgba(152, 121, 78, 0.32), rgba(112, 142, 78, 0.2));
+}
+
+.avatar-figure.outfit-forest .avatar-dress-tint,
+.avatar-figure.outfit-leaf .avatar-dress-tint {
+  background: linear-gradient(180deg, rgba(109, 148, 93, 0.33), rgba(206, 177, 91, 0.18));
+}
+
+.avatar-figure[data-rarity="SR"] .avatar-aura {
+  background:
+    radial-gradient(circle at 42% 54%, rgba(255, 239, 171, 0.44), transparent 36%),
+    radial-gradient(circle at 56% 63%, rgba(144, 187, 124, 0.34), transparent 48%);
+}
+
+.avatar-figure.protagonist {
+  width: min(42vw, 440px, 73vh);
+  max-height: none;
+}
+
+.avatar-figure.wardrobe-protagonist {
+  width: min(420px, 56vw, 56vh);
+  max-height: none;
+}
+
 .leefel-button {
   position: absolute;
   right: 72px;
@@ -442,14 +597,76 @@ button {
   overflow: visible;
 }
 
+.leefel-figure {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  margin: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.leefel-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.leefel-center-guide,
+.leefel-foot-guide {
+  position: absolute;
+  z-index: 0;
+  display: none;
+  pointer-events: none;
+}
+
+.leefel-center-guide {
+  inset: 0 50%;
+  border-left: 1px solid rgba(230, 69, 69, 0.72);
+}
+
+.leefel-foot-guide {
+  left: 0;
+  right: 0;
+  bottom: 7%;
+  border-bottom: 1px solid rgba(65, 119, 224, 0.75);
+}
+
+.leefel-figure[data-debug="black"] {
+  background: #050505;
+}
+
+.leefel-figure[data-debug="white"] {
+  background: #fff;
+}
+
+.leefel-figure[data-debug="checker"] {
+  background:
+    linear-gradient(45deg, #d9d9d9 25%, transparent 25% 75%, #d9d9d9 75%),
+    linear-gradient(45deg, #d9d9d9 25%, transparent 25% 75%, #d9d9d9 75%);
+  background-color: #fff;
+  background-position: 0 0, 12px 12px;
+  background-size: 24px 24px;
+}
+
+.leefel-figure[data-debug="black"] .leefel-center-guide,
+.leefel-figure[data-debug="black"] .leefel-foot-guide,
+.leefel-figure[data-debug="white"] .leefel-center-guide,
+.leefel-figure[data-debug="white"] .leefel-foot-guide,
+.leefel-figure[data-debug="checker"] .leefel-center-guide,
+.leefel-figure[data-debug="checker"] .leefel-foot-guide {
+  display: block;
+}
+
 .leefel {
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 164px;
-  height: auto;
-  max-height: none;
-  object-fit: contain;
+  width: 210px;
+  height: 210px;
+  border-radius: 18px;
   filter: drop-shadow(0 12px 12px rgba(72, 45, 22, 0.18));
   animation: floaty 3.8s ease-in-out infinite;
 }
@@ -1738,8 +1955,10 @@ h3 {
   width: min(620px, 92vw);
 }
 
-.dialogue-modal img {
+.dialogue-modal > img,
+.dialogue-leefel {
   width: 180px;
+  height: 180px;
   animation: floaty 3.8s ease-in-out infinite;
 }
 
@@ -1897,11 +2116,14 @@ h3 {
   background: rgba(255, 250, 240, 0.72);
 }
 
-.scan-preview > img {
+.scan-preview > img,
+.scan-leefel {
   position: absolute;
   right: 12px;
   top: -34px;
   width: 96px;
+  height: 96px;
+  border-radius: 12px;
   filter: drop-shadow(0 10px 12px rgba(72, 45, 22, 0.15));
 }
 
@@ -2494,6 +2716,7 @@ h3 {
 
   .leefel {
     width: 132px;
+    height: 132px;
   }
 
   .speech {
