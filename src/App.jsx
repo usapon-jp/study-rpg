@@ -12,6 +12,7 @@ import {
 import { roomItems } from "./data/roomItems";
 import { townObjects } from "./data/townObjects";
 import { leefelAssets } from "./data/items";
+import { resolveDriveFolderLink } from "./data/driveLinks";
 import { loadState, saveState } from "./storage";
 
 const rarityWeight = { N: 70, R: 25, SR: 5 };
@@ -193,12 +194,6 @@ function driveOutputPathsFor(draft) {
     resultCard: `${root}/学習ログ/成果カード/`,
     monthlyLog: `${root}/学習ログ/月別ログ/${todayString().slice(0, 7)}/`,
   };
-}
-
-function driveSearchUrl(draft) {
-  const root = draft.driveRootName || "勉強RPG（たま）";
-  const query = [root, draft.subject || subjectOptions[0], draft.purpose || purposeOptions[0]].filter(Boolean).join(" ");
-  return `https://drive.google.com/drive/search?q=${encodeURIComponent(query)}`;
 }
 
 function clampPercent(value) {
@@ -809,7 +804,7 @@ export default function App() {
 
   function openDriveFolder() {
     const draft = scanDraft || createScanDraft(state);
-    window.open(draft.driveUrl || driveSearchUrl(draft), "_blank", "noopener,noreferrer");
+    window.open(resolveDriveFolderLink(draft).url, "_blank", "noopener,noreferrer");
   }
 
   function saveScanResult() {
@@ -1034,6 +1029,7 @@ function buildScanJson(draft, analysis = createScanAnalysis(draft)) {
   const minutes = Math.max(5, Number(draft.studyMinutes || 0));
   const xp = Math.max(20, Math.round(minutes * 0.6) + analysis.tasks.length * 12);
   const coin = Math.max(8, Math.round(minutes * 0.12) + analysis.tasks.length * 4);
+  const driveFolderLink = resolveDriveFolderLink(draft);
   return {
     date: todayString(),
     studyMinutes: minutes,
@@ -1050,7 +1046,8 @@ function buildScanJson(draft, analysis = createScanAnalysis(draft)) {
       path: drivePathFor(draft),
       outputPaths: driveOutputPathsFor(draft),
       rootUrl: draft.driveRootUrl || "",
-      url: draft.driveUrl || driveSearchUrl(draft),
+      url: driveFolderLink.url,
+      source: driveFolderLink.source,
     },
     evidence: {
       driveUrl: draft.driveUrl,
@@ -1628,6 +1625,7 @@ function ResultModal({ draft, leefelDebugBackdrop = "off", onChange, onFiles, on
   const analysis = draft.analysis || createScanAnalysis(draft);
   const drivePath = drivePathFor(draft);
   const outputPaths = driveOutputPathsFor(draft);
+  const driveFolderLink = resolveDriveFolderLink(draft);
   return (
     <div className="modal-backdrop">
       <section className="modal result-modal">
@@ -1661,7 +1659,7 @@ function ResultModal({ draft, leefelDebugBackdrop = "off", onChange, onFiles, on
               <span>スキャン前に選択</span>
               <strong>{drivePath}</strong>
               <small>保存先: {outputPaths.submission}</small>
-              <button type="button" onClick={onOpenDrive}>教科/目的でDriveを開く</button>
+              <button type="button" onClick={onOpenDrive}>{driveFolderLink.label}</button>
             </div>
             <label>今日の分数
               <input type="number" min="0" value={draft.studyMinutes} onChange={(event) => onChange({ studyMinutes: Number(event.target.value) })} />
