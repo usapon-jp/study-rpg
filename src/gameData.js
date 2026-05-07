@@ -1,5 +1,8 @@
 export const asset = (name) => `${import.meta.env.BASE_URL}assets/crops/${name}`;
 
+export { roomItems, roomItemsById } from "./data/roomItems";
+export { townObjects, townObjectsById } from "./data/townObjects";
+
 export const questTypes = [
   { id: "main", label: "メイン" },
   { id: "sub", label: "サブ" },
@@ -146,6 +149,15 @@ export function createInitialState() {
       materials: { leaf: 3, petal: 2, "book-fragment": 1, "light-drop": 1 },
     },
     room: {
+      wall: "wall_default_01",
+      floor: "floor_default_01",
+      furniture: {
+        desk: "desk",
+        shelf: "bookshelf",
+        rug: null,
+        window: null,
+        smallItem: "lamp",
+      },
       selectedFurniture: "desk",
       placed: [
         { id: "desk-1", furnitureId: "desk", cell: 12, rotation: 0 },
@@ -158,6 +170,11 @@ export function createInitialState() {
       growth: 62,
       discoveredSpirits: ["flower"],
       theme: { flower: 2, book: 2, night: 1, relax: 1 },
+      objects: [
+        { itemId: "bench_wood_01", spotId: "plaza_left", rotation: 0 },
+        { itemId: "tree_learning_01", spotId: "garden_back", rotation: 0 },
+        { itemId: "flowerbed_round_01", spotId: "plaza_right", rotation: 0 },
+      ],
     },
     gachaHistory: [],
     importedDates: [],

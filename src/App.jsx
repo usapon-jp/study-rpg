@@ -9,11 +9,105 @@ import {
   questTypes,
   spirits,
 } from "./gameData";
+import { roomItems } from "./data/roomItems";
+import { townObjects } from "./data/townObjects";
 import { loadState, saveState } from "./storage";
 
 const rarityWeight = { N: 70, R: 25, SR: 5 };
 const subjectOptions = ["英語", "数学", "理科", "社会", "国語"];
 const purposeOptions = ["宿題", "テスト勉強", "チャレンジ", "自由学習"];
+const roomSlots = [
+  { id: "desk", label: "机" },
+  { id: "shelf", label: "棚" },
+  { id: "rug", label: "ラグ" },
+  { id: "window", label: "窓" },
+  { id: "smallItem", label: "小物" },
+];
+const townSpots = [
+  { id: "plaza_left", label: "広場 左" },
+  { id: "plaza_center", label: "広場 中央" },
+  { id: "plaza_right", label: "広場 右" },
+  { id: "path_front", label: "小道 前" },
+  { id: "garden_back", label: "庭 奥" },
+  { id: "sign_corner", label: "看板横" },
+  { id: "light_corner", label: "灯り横" },
+];
+const fallbackRoomItems = {
+  wall: [
+    { id: "warm", name: "木もれびの壁", value: "warm", theme: "relax" },
+    { id: "leaf", name: "若葉の壁", value: "leaf", theme: "flower" },
+    { id: "night", name: "星夜の壁", value: "night", theme: "night" },
+    { id: "book", name: "本棚の壁", value: "book", theme: "book" },
+  ],
+  floor: [
+    { id: "wood", name: "やわらか木床", value: "wood", theme: "relax" },
+    { id: "grass", name: "草花ラグ床", value: "grass", theme: "flower" },
+    { id: "tile", name: "月しずくタイル", value: "tile", theme: "night" },
+    { id: "study", name: "読書の床", value: "study", theme: "book" },
+  ],
+};
+const fallbackTownObjects = [
+  { id: "plant", name: "観葉植物", icon: "furniture-plant.png", theme: "flower" },
+  { id: "planter", name: "花だん", icon: "furniture-planter.png", theme: "flower" },
+  { id: "lamp", name: "きのこランプ", icon: "furniture-lamp.png", theme: "night" },
+  { id: "bench", name: "葉っぱのベンチ", icon: "furniture-bench.png", theme: "relax" },
+  { id: "bookshelf", name: "本の屋台", icon: "furniture-bookshelf.png", theme: "book" },
+  { id: "fountain", name: "小さな噴水", icon: "furniture-fountain.png", theme: "relax" },
+];
+
+function itemKey(item) {
+  return item.itemId || item.id;
+}
+
+function itemIcon(item) {
+  const iconFallbacks = {
+    "rug-flower-round": "furniture-bed.png",
+    post: "top-mail.png",
+    post_red_01: "top-mail.png",
+    tree: "furniture-plant.png",
+    tree_learning_01: "furniture-plant.png",
+    sign: "nav-town.png",
+    sign_guide_01: "nav-town.png",
+  };
+  return iconFallbacks[itemKey(item)] || item.icon;
+}
+
+function surfaceTone(value, kind) {
+  if (!value) return kind === "wall" ? "warm" : "wood";
+  if (value.includes("default")) return kind === "wall" ? "leaf" : "wood";
+  if (value.includes("leaf")) return "leaf";
+  if (value.includes("blue")) return "leaf";
+  if (value.includes("night") || value.includes("moon")) return "night";
+  if (value.includes("book") || value.includes("study")) return "book";
+  if (value.includes("grass") || value.includes("flower")) return "grass";
+  if (value.includes("tile")) return "tile";
+  if (value.includes("warm") || value.includes("wood")) return "wood";
+  return value;
+}
+
+function isUnlocked(item, state) {
+  const condition = item.unlockCondition;
+  if (!condition || condition.type === "default") return true;
+  if (condition.type === "level") return state.player.level >= Number(condition.value || 0);
+  return true;
+}
+
+function roomFurnitureBySlot(room) {
+  if (Array.isArray(room?.furniture)) {
+    return Object.fromEntries(room.furniture.map((item) => [item.slot, item.itemId]));
+  }
+  return room?.furniture || {};
+}
+
+function normalizedRoomFurniture(room) {
+  const bySlot = roomFurnitureBySlot(room);
+  return Object.fromEntries(roomSlots.map((slot) => [slot.id, bySlot[slot.id] || null]));
+}
+
+function townObjectsBySpot(town) {
+  if (!Array.isArray(town?.objects)) return town?.objects || {};
+  return Object.fromEntries(town.objects.map((item, index) => [item.spotId || item.spot || townSpots[index % townSpots.length].id, item.itemId]));
+}
 const scanTaskPresets = {
   英語: {
     宿題: ["ワーク p12〜15", "単語20個", "教科書音読"],
@@ -176,6 +270,32 @@ export default function App() {
   );
 
   const selectedFurniture = furnitureCatalog.find((item) => item.id === state.room.selectedFurniture) || furnitureCatalog[0];
+  const roomFurnitureItems = useMemo(
+    () => {
+      const configuredItems = roomItems.filter((item) => item.category === "furniture" && isUnlocked(item, state));
+      if (configuredItems.length) return configuredItems;
+      return furnitureCatalog
+        .filter((item) => state.inventory.furniture.includes(item.id))
+        .map((item) => ({
+          ...item,
+          itemId: item.id,
+          slot: item.id === "bookshelf" ? "shelf" : item.id === "window" ? "window" : item.id === "lamp" || item.id === "plant" ? "smallItem" : item.id === "bench" || item.id === "bed" ? "rug" : "desk",
+        }));
+    },
+    [state]
+  );
+  const roomSurfaceItems = useMemo(() => ({
+    wall: roomItems.filter((item) => item.category === "wall" && isUnlocked(item, state)),
+    floor: roomItems.filter((item) => item.category === "floor" && isUnlocked(item, state)),
+  }), [state]);
+  const townObjectCatalog = useMemo(
+    () => {
+      const configuredObjects = townObjects.filter((item) => isUnlocked(item, state));
+      if (configuredObjects.length) return configuredObjects;
+      return fallbackTownObjects.filter((item) => state.inventory.furniture.includes(item.id));
+    },
+    [state]
+  );
 
   function updateState(next) {
     setState((current) => (typeof next === "function" ? next(current) : next));
@@ -374,6 +494,82 @@ export default function App() {
     }));
   }
 
+  function updateRoomSurface(kind, value) {
+    updateState((current) => ({
+      ...current,
+      room: { ...current.room, [kind]: value },
+    }));
+    setToast(kind === "wall" ? "壁紙を変えたよ" : "床を変えたよ");
+  }
+
+  function placeRoomSlot(slot, item) {
+    updateState((current) => {
+      const furniture = { ...normalizedRoomFurniture(current.room), [slot]: itemKey(item) };
+      const theme = { ...current.town.theme };
+      theme[item.theme] = (theme[item.theme] || 0) + 1;
+      const discovered = discoverSpirits({ ...current, town: { ...current.town, theme } });
+      return {
+        ...current,
+        room: { ...current.room, furniture },
+        town: {
+          ...current.town,
+          theme,
+          discoveredSpirits: discovered,
+          growth: clampPercent(current.town.growth + 1),
+        },
+      };
+    });
+    setToast(`${item.name}を置いたよ`);
+  }
+
+  function removeRoomSlot(slot) {
+    updateState((current) => {
+      const furniture = { ...normalizedRoomFurniture(current.room), [slot]: null };
+      return {
+        ...current,
+        room: { ...current.room, furniture },
+      };
+    });
+    setToast("家具をはずしたよ");
+  }
+
+  function placeTownObject(spot, item) {
+    updateState((current) => {
+      const nextItem = { itemId: itemKey(item), spotId: spot, rotation: 0 };
+      const objects = Array.isArray(current.town?.objects)
+        ? [...current.town.objects.filter((placed) => (placed.spotId || placed.spot || townSpots[placed.cell % townSpots.length]?.id) !== spot), nextItem]
+        : { ...(current.town?.objects || {}), [spot]: itemKey(item) };
+      const theme = { ...current.town.theme };
+      theme[item.theme] = (theme[item.theme] || 0) + 1;
+      const discovered = discoverSpirits({ ...current, town: { ...current.town, theme } });
+      return {
+        ...current,
+        town: {
+          ...current.town,
+          objects,
+          theme,
+          discoveredSpirits: discovered,
+          growth: clampPercent(current.town.growth + 2),
+        },
+      };
+    });
+    setToast(`${item.name}を町に置いたよ`);
+  }
+
+  function removeTownObject(spot) {
+    updateState((current) => {
+      const objects = Array.isArray(current.town?.objects)
+        ? current.town.objects.filter((placed) => (placed.spotId || placed.spot || townSpots[placed.cell % townSpots.length]?.id) !== spot)
+        : { ...(current.town?.objects || {}) };
+      if (!Array.isArray(objects)) delete objects[spot];
+      return {
+        ...current,
+        town: { ...current.town, objects },
+      };
+    });
+    setToast("町のオブジェクトをはずしたよ");
+  }
+
   function resetGame() {
     const next = createInitialState();
     updateState(next);
@@ -531,7 +727,6 @@ export default function App() {
               townStage={townStage}
               setTab={setTab}
               setDialogueOpen={setDialogueOpen}
-              setRoomOpen={setRoomOpen}
             />
           )}
           {tab === "quests" && (
@@ -546,7 +741,25 @@ export default function App() {
               importError={importError}
             />
           )}
-          {tab === "town" && <TownScreen state={state} townStage={townStage} placeFurniture={placeFurniture} />}
+          {tab === "room" && (
+            <RoomScreen
+              state={state}
+              roomItems={roomSurfaceItems.wall.length && roomSurfaceItems.floor.length ? roomSurfaceItems : fallbackRoomItems}
+              roomFurnitureItems={roomFurnitureItems}
+              updateRoomSurface={updateRoomSurface}
+              placeRoomSlot={placeRoomSlot}
+              removeRoomSlot={removeRoomSlot}
+            />
+          )}
+          {tab === "town" && (
+            <TownScreen
+              state={state}
+              townStage={townStage}
+              townObjects={townObjectCatalog}
+              placeTownObject={placeTownObject}
+              removeTownObject={removeTownObject}
+            />
+          )}
           {tab === "encyclopedia" && <EncyclopediaScreen state={state} />}
           {tab === "gacha" && <GachaScreen state={state} runGacha={runGacha} gachaResults={gachaResults} gachaEffect={gachaEffect} onSkipGacha={skipGachaEffect} />}
           {tab === "wardrobe" && <WardrobeScreen state={state} equipOutfit={equipOutfit} />}
@@ -719,7 +932,6 @@ function HomeScreen({
   townStage,
   setTab,
   setDialogueOpen,
-  setRoomOpen,
 }) {
   const [leefelTipOpen, setLeefelTipOpen] = useState(false);
   const daily = activeQuests.slice(0, 3);
@@ -736,7 +948,12 @@ function HomeScreen({
     return () => window.clearTimeout(timerId);
   }, [leefelTipOpen]);
   return (
-    <div className="home-scene">
+    <div
+      className="home-scene"
+      data-room-wall={surfaceTone(state.room?.wall || (state.town.theme?.book >= 2 ? "book" : "warm"), "wall")}
+      data-room-floor={surfaceTone(state.room?.floor || (state.town.theme?.flower >= 2 ? "grass" : "wood"), "floor")}
+      data-town-theme={Object.entries(state.town.theme || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || "relax"}
+    >
       <img src={asset("home-bg.png")} alt="" className="home-bg" />
       <aside className="left-stack">
         <Panel className="quest-panel ribbon-panel">
@@ -798,10 +1015,10 @@ function HomeScreen({
       <aside className="right-stack">
         <Panel className="room-card">
           <div className="panel-head"><h2>マイルーム Lv.{state.player.level}</h2><button>i</button></div>
-          <img src={asset("town-lv30.png")} alt="" className="room-preview" />
+          <RoomPreview state={state} compact />
           <div className="metric"><span>成長度</span><b>{state.town.growth}%</b></div>
           <Progress value={state.town.growth} />
-          <button className="primary-button" type="button" onClick={() => setRoomOpen(true)}>🪴 マイルームをカスタマイズ</button>
+          <button className="primary-button" type="button" onClick={() => setTab("room")}>🪴 マイルームをカスタマイズ</button>
         </Panel>
         <Panel className="town-card">
           <h3>町の発展度</h3>
@@ -846,20 +1063,163 @@ function QuestScreen({ quests, questFilter, setQuestFilter, completeQuest, jsonT
   );
 }
 
-function TownScreen({ state, townStage, placeFurniture }) {
-  const discovered = spirits.filter((spirit) => state.town.discoveredSpirits.includes(spirit.id));
+function RoomPreview({ state, compact = false }) {
+  const furnitureBySlot = roomFurnitureBySlot(state.room);
+  const shouldShowLegacy = !Object.values(furnitureBySlot).some(Boolean);
+  const legacyPlaced = shouldShowLegacy ? state.room?.placed || [] : [];
   return (
-    <div className="content-grid two-col">
+    <div
+      className={`room-preview-scene ${compact ? "is-compact" : ""}`}
+      data-room-wall={surfaceTone(state.room?.wall || "warm", "wall")}
+      data-room-floor={surfaceTone(state.room?.floor || "wood", "floor")}
+      data-town-theme={Object.entries(state.town.theme || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || "relax"}
+    >
+      <div className="room-wall-band" />
+      <div className="room-floor-band" />
+      {roomSlots.map((slot) => {
+        const furnitureId = furnitureBySlot[slot.id];
+        const item = roomItems.find((furniture) => itemKey(furniture) === furnitureId) || furnitureCatalog.find((furniture) => furniture.id === furnitureId);
+        return (
+          <div className={`room-slot-preview slot-${slot.id}`} key={slot.id}>
+            {item && <img src={asset(itemIcon(item))} alt="" />}
+          </div>
+        );
+      })}
+      {legacyPlaced.slice(0, compact ? 3 : 6).map((placed) => {
+        const item = furnitureCatalog.find((furniture) => furniture.id === placed.furnitureId);
+        return item ? (
+          <img
+            className="legacy-room-item"
+            key={placed.id}
+            src={asset(item.icon)}
+            alt=""
+            style={{
+              "--legacy-x": `${12 + ((placed.cell || 0) % 5) * 17}%`,
+              "--legacy-y": `${24 + Math.floor((placed.cell || 0) / 5) * 12}%`,
+              transform: `rotate(${placed.rotation || 0}deg)`,
+            }}
+          />
+        ) : null;
+      })}
+    </div>
+  );
+}
+
+function RoomScreen({ state, roomItems, roomFurnitureItems, updateRoomSurface, placeRoomSlot, removeRoomSlot }) {
+  const [activeSlot, setActiveSlot] = useState(roomSlots[0].id);
+  const selectedId = roomFurnitureBySlot(state.room)[activeSlot];
+  const slotItems = roomFurnitureItems.filter((item) => item.slot === activeSlot);
+  return (
+    <div className="content-grid room-screen-grid">
+      <Panel className="room-preview-panel">
+        <div className="panel-head"><h2>マイルーム</h2><span>壁紙・床・家具でホームの雰囲気が変わるよ</span></div>
+        <RoomPreview state={state} />
+      </Panel>
+      <Panel className="room-control-panel">
+        <section className="surface-section">
+          <h3>壁紙</h3>
+          <div className="surface-options">
+            {roomItems.wall.map((item) => (
+              <button
+                className={(state.room?.wall || "warm") === itemKey(item) ? "active" : ""}
+                type="button"
+                key={itemKey(item)}
+                data-swatch={surfaceTone(itemKey(item), "wall")}
+                onClick={() => updateRoomSurface("wall", itemKey(item))}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="surface-section">
+          <h3>床</h3>
+          <div className="surface-options">
+            {roomItems.floor.map((item) => (
+              <button
+                className={(state.room?.floor || "wood") === itemKey(item) ? "active" : ""}
+                type="button"
+                key={itemKey(item)}
+                data-swatch={surfaceTone(itemKey(item), "floor")}
+                onClick={() => updateRoomSurface("floor", itemKey(item))}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="slot-section">
+          <h3>家具スロット</h3>
+          <div className="room-slot-tabs">
+            {roomSlots.map((slot) => (
+              <button className={activeSlot === slot.id ? "active" : ""} type="button" key={slot.id} onClick={() => setActiveSlot(slot.id)}>
+                {slot.label}
+              </button>
+            ))}
+          </div>
+          <div className="slot-item-grid">
+            {slotItems.map((item) => (
+              <button className={selectedId === itemKey(item) ? "active" : ""} type="button" key={itemKey(item)} onClick={() => placeRoomSlot(activeSlot, item)}>
+                <img src={asset(itemIcon(item))} alt="" />
+                <span>{item.name}</span>
+                <b>置く</b>
+              </button>
+            ))}
+            {!slotItems.length && <p className="empty-note">このスロットに置ける家具は、ショップで増やせるよ。</p>}
+          </div>
+          <button className="danger-button subtle" type="button" onClick={() => removeRoomSlot(activeSlot)} disabled={!selectedId}>はずす</button>
+        </section>
+      </Panel>
+    </div>
+  );
+}
+
+function TownScreen({ state, townStage, townObjects, placeTownObject, removeTownObject }) {
+  const [activeSpot, setActiveSpot] = useState(townSpots[0].id);
+  const discovered = spirits.filter((spirit) => state.town.discoveredSpirits.includes(spirit.id));
+  const objects = townObjectsBySpot(state.town);
+  const selectedObjectId = objects[activeSpot];
+  return (
+    <div className="content-grid town-build-grid">
       <Panel className="town-main">
-        <h2>森の広場 Lv.{state.town.level}</h2>
-        <img src={asset(townStage)} alt="" />
+        <div className="panel-head"><h2>森の広場 Lv.{state.town.level}</h2><span>成長度 {state.town.growth}%</span></div>
+        <div className="town-spot-stage">
+          <img src={asset(townStage)} alt="" />
+          {townSpots.map((spot) => {
+            const item = townObjects.find((object) => itemKey(object) === objects[spot.id]) || fallbackTownObjects.find((object) => itemKey(object) === objects[spot.id]);
+            return (
+              <button className={`town-spot spot-${spot.id} ${activeSpot === spot.id ? "active" : ""}`} type="button" key={spot.id} onClick={() => setActiveSpot(spot.id)} aria-label={spot.label}>
+                {item ? <img src={asset(itemIcon(item))} alt="" /> : <span>{spot.label}</span>}
+              </button>
+            );
+          })}
+        </div>
         <Progress value={state.town.growth} />
         <div className="theme-grid">{Object.entries(state.town.theme).map(([key, value]) => <span key={key}>{key}<b>{value}</b></span>)}</div>
       </Panel>
-      <Panel>
+      <Panel className="town-control-panel">
+        <h2>スポット編集</h2>
+        <div className="town-spot-tabs">
+          {townSpots.map((spot) => (
+            <button className={activeSpot === spot.id ? "active" : ""} type="button" key={spot.id} onClick={() => setActiveSpot(spot.id)}>
+              {spot.label}
+            </button>
+          ))}
+        </div>
+        <div className="town-object-grid">
+          {townObjects.map((item) => (
+            <button className={selectedObjectId === itemKey(item) ? "active" : ""} type="button" key={itemKey(item)} onClick={() => placeTownObject(activeSpot, item)}>
+              <img src={asset(itemIcon(item))} alt="" />
+              <span>{item.name}</span>
+              <b>置く</b>
+            </button>
+          ))}
+        </div>
+        <button className="danger-button subtle" type="button" onClick={() => removeTownObject(activeSpot)} disabled={!selectedObjectId}>はずす</button>
+      </Panel>
+      <Panel className="spirit-panel">
         <h2>遊びに来た精霊</h2>
         <div className="spirit-grid">{discovered.map((spirit) => <SpiritCard key={spirit.id} spirit={spirit} />)}</div>
-        <button className="primary-button" onClick={() => placeFurniture(Math.floor(Math.random() * 25))}>家具を置いて町を育てる</button>
       </Panel>
     </div>
   );
