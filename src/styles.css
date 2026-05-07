@@ -2491,6 +2491,50 @@ h3 {
   font-weight: 900;
 }
 
+.level-up-notice {
+  position: fixed;
+  z-index: 151;
+  top: 74px;
+  left: 50%;
+  min-width: min(360px, calc(100vw - 40px));
+  transform: translateX(-50%);
+  padding: 16px 22px 18px;
+  border: 1px solid rgba(214, 186, 123, 0.78);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 241, 178, 0.9), transparent 34%),
+    linear-gradient(145deg, rgba(255, 252, 238, 0.97), rgba(238, 249, 224, 0.96));
+  box-shadow: 0 18px 48px rgba(112, 83, 43, 0.22);
+  color: #513c2f;
+  text-align: center;
+  animation: levelNoticeIn 520ms cubic-bezier(.18, .9, .24, 1.2) both;
+  pointer-events: none;
+}
+
+.level-up-notice span {
+  display: inline-flex;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(125, 158, 92, 0.16);
+  color: #6f8d51;
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.level-up-notice strong {
+  display: block;
+  margin-top: 4px;
+  color: #c7864d;
+  font-size: clamp(1.8rem, 3vw, 2.35rem);
+  line-height: 1;
+}
+
+.level-up-notice p {
+  margin: 8px 0 0;
+  font-weight: 900;
+}
+
 .is-sparkling::after {
   content: "✦ ✧ ✦";
   position: fixed;
@@ -2517,6 +2561,11 @@ h3 {
 @keyframes panelIn {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes levelNoticeIn {
+  from { opacity: 0; transform: translate(-50%, -14px) scale(0.94); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
 @keyframes rewardPop {

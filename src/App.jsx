@@ -205,20 +205,115 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, value));
 }
 
-function awardQuest(state, quest, source = "quest") {
+function toNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function nextXpAfterLevelUp(previousNextXp, nextLevel) {
+  const previous = Math.max(100, toNumber(previousNextXp, 100));
+  const levelTarget = 800 + nextLevel * 100;
+  return Math.round(Math.max(previous + 80, previous * 1.12, levelTarget) / 10) * 10;
+}
+
+function normalizedTownObjects(town) {
+  if (Array.isArray(town?.objects)) {
+    return town.objects
+      .map((item, index) => ({
+        itemId: item.itemId || item.id,
+        spotId: item.spotId || item.spot || townSpots[(item.cell ?? index) % townSpots.length]?.id,
+        rotation: item.rotation || 0,
+      }))
+      .filter((item) => item.itemId && item.spotId);
+  }
+  return Object.entries(town?.objects || {})
+    .map(([spotId, itemId]) => ({ itemId, spotId, rotation: 0 }))
+    .filter((item) => item.itemId);
+}
+
+function applyTownReward(state, levelUps, baseGrowth) {
+  const objects = normalizedTownObjects(state.town);
+  const usedItemIds = new Set(objects.map((item) => item.itemId));
+  const usedSpotIds = new Set(objects.map((item) => item.spotId));
+  const openSpots = townSpots.filter((spot) => !usedSpotIds.has(spot.id));
+  const unlockedObjects = [];
+  const theme = { ...state.town.theme };
+  const nextObjects = [...objects];
+
+  for (let index = 0; index < levelUps && index < openSpots.length; index += 1) {
+    const item = townObjects.find((object) => !usedItemIds.has(itemKey(object)));
+    if (!item) break;
+    const placed = { itemId: itemKey(item), spotId: openSpots[index].id, rotation: 0, unlockedAt: new Date().toISOString() };
+    nextObjects.push(placed);
+    unlockedObjects.push(item);
+    usedItemIds.add(itemKey(item));
+    theme[item.theme] = (theme[item.theme] || 0) + 1;
+  }
+
+  const growthTotal = Math.max(0, toNumber(state.town.growth) + toNumber(baseGrowth) + levelUps * 12);
+  const growthLevelUps = Math.floor(growthTotal / 100);
+  const growth = growthTotal % 100;
+  const townLevel = Math.min(30, Math.max(toNumber(state.town.level, 1), toNumber(state.town.level, 1) + levelUps + growthLevelUps));
+  const town = {
+    ...state.town,
+    level: townLevel,
+    growth: clampPercent(growth),
+    objects: nextObjects,
+    theme,
+  };
+  town.discoveredSpirits = discoverSpirits({ ...state, town });
+
+  return { town, unlockedObjects, townLevelUps: levelUps + growthLevelUps };
+}
+
+function applyRewardProgress(state, reward = {}) {
+  const earnedXp = Math.max(0, toNumber(reward.xp));
+  const earnedCoin = Math.max(0, toNumber(reward.coin));
+  let level = Math.max(1, toNumber(state.player.level, 1));
+  let xp = Math.max(0, toNumber(state.player.xp) + earnedXp);
+  let nextXp = Math.max(100, toNumber(state.player.nextXp, 100));
+  let levelUps = 0;
+
+  while (xp >= nextXp && levelUps < 50) {
+    xp -= nextXp;
+    level += 1;
+    levelUps += 1;
+    nextXp = nextXpAfterLevelUp(nextXp, level);
+  }
+
+  const player = {
+    ...state.player,
+    level,
+    xp,
+    nextXp,
+    coin: Math.max(0, toNumber(state.player.coin) + earnedCoin),
+  };
+  const townReward = applyTownReward({ ...state, player }, levelUps, reward.townGrowth || 0);
+  const nextState = {
+    ...state,
+    player,
+    town: townReward.town,
+  };
+
+  return {
+    state: nextState,
+    earnedXp,
+    earnedCoin,
+    levelUps,
+    unlockedObjects: townReward.unlockedObjects,
+    townLevelUps: townReward.townLevelUps,
+  };
+}
+
+function awardQuest(state, quest, source = "quest", options = {}) {
   const materialId = quest.material || "leaf";
   const completedEntry = {
     ...quest,
     completedAt: new Date().toISOString(),
     source,
   };
-  return {
+  const next = {
     ...state,
-    player: {
-      ...state.player,
-      xp: state.player.xp + Number(quest.xp || 0),
-      coin: state.player.coin + Number(quest.coin || 0),
-    },
     completedLog: [completedEntry, ...state.completedLog].slice(0, 40),
     inventory: {
       ...state.inventory,
@@ -228,6 +323,11 @@ function awardQuest(state, quest, source = "quest") {
       },
     },
   };
+  return applyRewardProgress(next, {
+    xp: quest.xp,
+    coin: quest.coin,
+    townGrowth: options.townGrowth ?? 3,
+  });
 }
 
 function discoverSpirits(state) {
@@ -256,6 +356,7 @@ export default function App() {
   const [scanDraft, setScanDraft] = useState(null);
   const [progressMode, setProgressMode] = useState("week");
   const [sparkle, setSparkle] = useState(false);
+  const [levelUpNotice, setLevelUpNotice] = useState(null);
 
   useEffect(() => saveState(state), [state]);
 
@@ -283,7 +384,7 @@ export default function App() {
 
   const testDays = daysUntil(state.settings.testDate);
   const workProgress = clampPercent((state.settings.workDonePages / state.settings.workTotalPages) * 100);
-  const xpProgress = clampPercent((state.player.xp / state.player.nextXp) * 100);
+  const xpProgress = clampPercent((state.player.xp / Math.max(1, state.player.nextXp || 1)) * 100);
   const totalStudyMinutes = state.player.studyMinutes + Math.floor((state.timer?.elapsedSeconds || 0) / 60);
   const activeQuests = state.quests.filter((quest) => quest.status === "active");
   const visibleQuests = activeQuests.filter((quest) => quest.type === questFilter);
@@ -327,6 +428,26 @@ export default function App() {
     setState((current) => (typeof next === "function" ? next(current) : next));
   }
 
+  function showRewardFeedback(result, fallbackMessage) {
+    setSparkle(true);
+    window.setTimeout(() => setSparkle(false), 900);
+
+    if (result?.levelUps > 0) {
+      const unlockedName = result.unlockedObjects?.[0]?.name;
+      const townText = unlockedName ? `町に「${unlockedName}」が増えたよ` : "町が少し広がったよ";
+      setLevelUpNotice({
+        level: result.state.player.level,
+        townText,
+        levelUps: result.levelUps,
+      });
+      window.setTimeout(() => setLevelUpNotice(null), 2600);
+      setToast(`Lv.${result.state.player.level}になったよ！ ${townText}`);
+      return;
+    }
+
+    setToast(fallbackMessage);
+  }
+
   function startQuest(questId) {
     const quest = state.quests.find((item) => item.id === questId);
     if (!quest) return;
@@ -344,68 +465,55 @@ export default function App() {
   }
 
   function completeQuest(questId) {
-    updateState((current) => {
-      const quest = current.quests.find((item) => item.id === questId);
-      if (!quest) return current;
-      const updated = awardQuest(
-        {
-          ...current,
-          quests: current.quests.map((item) => (item.id === questId ? { ...item, status: "done" } : item)),
-        },
-        quest
-      );
-      return {
-        ...updated,
-        town: {
-          ...updated.town,
-          growth: clampPercent(updated.town.growth + 3),
-        },
-      };
-    });
-    setSparkle(true);
-    window.setTimeout(() => setSparkle(false), 800);
-    setToast("世界に小さな芽が増えたよ");
+    const quest = state.quests.find((item) => item.id === questId);
+    if (!quest) return;
+    const result = awardQuest(
+      {
+        ...state,
+        quests: state.quests.map((item) => (item.id === questId ? { ...item, status: "done" } : item)),
+      },
+      quest,
+      "quest",
+      { townGrowth: 3 }
+    );
+    updateState(result.state);
+    showRewardFeedback(result, "世界に小さな芽が増えたよ");
   }
 
   function importStudyJson() {
     try {
       const data = JSON.parse(jsonText);
-      updateState((current) => {
-        let next = {
-          ...current,
-          player: {
-            ...current.player,
-            studyMinutes: current.player.studyMinutes + Number(data.studyMinutes || 0),
-            xp: current.player.xp + Number(data.rewards?.xp || 0),
-            coin: current.player.coin + Number(data.rewards?.coin || 0),
+      let next = {
+        ...state,
+        player: {
+          ...state.player,
+          studyMinutes: state.player.studyMinutes + Number(data.studyMinutes || 0),
+        },
+        importedDates: data.date ? Array.from(new Set([data.date, ...state.importedDates])) : state.importedDates,
+        recoveryLog: [...(data.recoveryQuests || []), ...state.recoveryLog].slice(0, 20),
+      };
+      (data.completedQuests || []).forEach((quest, index) => {
+        next.completedLog = [
+          {
+            id: `import-${data.date || Date.now()}-${index}`,
+            subject: quest.subject || "勉強",
+            title: quest.title || "今日の勉強",
+            xp: Number(quest.xp || 0),
+            coin: Number(quest.coin || 0),
+            completedAt: new Date().toISOString(),
+            source: "json",
           },
-          importedDates: data.date ? Array.from(new Set([data.date, ...current.importedDates])) : current.importedDates,
-          recoveryLog: [...(data.recoveryQuests || []), ...current.recoveryLog].slice(0, 20),
-        };
-        (data.completedQuests || []).forEach((quest, index) => {
-          next.completedLog = [
-            {
-              id: `import-${data.date || Date.now()}-${index}`,
-              subject: quest.subject || "勉強",
-              title: quest.title || "今日の勉強",
-              xp: Number(quest.xp || 0),
-              coin: Number(quest.coin || 0),
-              completedAt: new Date().toISOString(),
-              source: "json",
-            },
-            ...next.completedLog,
-          ].slice(0, 40);
-        });
-        return {
-          ...next,
-          town: {
-            ...next.town,
-            growth: clampPercent(next.town.growth + Math.ceil(Number(data.studyMinutes || 0) / 20)),
-          },
-        };
+          ...next.completedLog,
+        ].slice(0, 40);
       });
+      const result = applyRewardProgress(next, {
+        xp: data.rewards?.xp,
+        coin: data.rewards?.coin,
+        townGrowth: Math.ceil(Number(data.studyMinutes || 0) / 20),
+      });
+      updateState(result.state);
       setImportError("");
-      setToast(data.message || "今日の記録を世界に反映したよ");
+      showRewardFeedback(result, data.message || "今日の記録を世界に反映したよ");
       setJsonText("");
     } catch {
       setImportError("JSONの形をもう一度だけ見てみよう。かっこやカンマが抜けているかも。");
@@ -715,13 +823,8 @@ export default function App() {
     const xp = generated.rewards.xp;
     const coin = generated.rewards.coin;
 
-    updateState((current) => ({
-      ...current,
-      player: {
-        ...current.player,
-        xp: current.player.xp + xp,
-        coin: current.player.coin + coin,
-      },
+    const next = {
+      ...state,
       completedLog: [
         ...generated.completedQuests.map((quest, index) => ({
           id: `scan-${Date.now()}-${index}`,
@@ -732,25 +835,21 @@ export default function App() {
           completedAt: new Date().toISOString(),
           source: "scan",
         })),
-        ...current.completedLog,
+        ...state.completedLog,
       ].slice(0, 40),
-      recoveryLog: [...generated.recoveryQuests, ...current.recoveryLog].slice(0, 20),
-      scanLogs: [{ ...draft, analysis, generated, savedAt: new Date().toISOString() }, ...(current.scanLogs || [])].slice(0, 20),
-      quests: current.quests.map((quest) => (draft.questId && draft.questType !== "free" && quest.id === draft.questId ? { ...quest, status: "done" } : quest)),
+      recoveryLog: [...generated.recoveryQuests, ...state.recoveryLog].slice(0, 20),
+      scanLogs: [{ ...draft, analysis, generated, savedAt: new Date().toISOString() }, ...(state.scanLogs || [])].slice(0, 20),
+      quests: state.quests.map((quest) => (draft.questId && draft.questType !== "free" && quest.id === draft.questId ? { ...quest, status: "done" } : quest)),
       studySession: {
-        ...current.studySession,
+        ...state.studySession,
         currentQuestId: null,
         startedAt: null,
       },
-      town: {
-        ...current.town,
-        growth: clampPercent(current.town.growth + 2),
-      },
-    }));
+    };
+    const result = applyRewardProgress(next, { xp, coin, townGrowth: 2 });
+    updateState(result.state);
     setScanDraft({ ...draft, analysis, generated, saved: true, scanning: false });
-    setSparkle(true);
-    window.setTimeout(() => setSparkle(false), 900);
-    setToast("今日の成果を世界に保存したよ");
+    showRewardFeedback(result, "今日の成果を世界に保存したよ");
   }
 
   function openLeefelProject() {
@@ -840,6 +939,13 @@ export default function App() {
         <BottomNav tab={tab} setTab={setTab} />
       </div>
       {toast && <div className="toast">{toast}</div>}
+      {levelUpNotice && (
+        <div className="level-up-notice" role="status" aria-live="polite">
+          <span>LEVEL UP</span>
+          <strong>Lv.{levelUpNotice.level}</strong>
+          <p>{levelUpNotice.townText}</p>
+        </div>
+      )}
       {dialogueOpen && <DialogueModal state={state} onClose={() => setDialogueOpen(false)} />}
       {resultOpen && (
         <ResultModal
