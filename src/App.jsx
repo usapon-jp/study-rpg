@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   asset,
   createInitialState,
@@ -129,7 +129,8 @@ export default function App() {
   const [jsonText, setJsonText] = useState("");
   const [importError, setImportError] = useState("");
   const [gachaResults, setGachaResults] = useState([]);
-  const [gachaEffect, setGachaEffect] = useState({ active: false, items: [] });
+  const [gachaEffect, setGachaEffect] = useState({ active: false, items: [], index: 0 });
+  const gachaTimersRef = useRef([]);
   const [roomOpen, setRoomOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(false);
@@ -138,6 +139,8 @@ export default function App() {
   const [sparkle, setSparkle] = useState(false);
 
   useEffect(() => saveState(state), [state]);
+
+  useEffect(() => () => clearGachaTimers(), []);
 
   useEffect(() => {
     if (!toast) return;
@@ -254,6 +257,23 @@ export default function App() {
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
+  function clearGachaTimers() {
+    gachaTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    gachaTimersRef.current = [];
+  }
+
+  function finishGacha(results) {
+    clearGachaTimers();
+    setGachaEffect({ active: false, items: [], index: 0 });
+    setGachaResults(results);
+    setSparkle(false);
+  }
+
+  function skipGachaEffect() {
+    if (!gachaEffect.active) return;
+    finishGacha(gachaEffect.items);
+  }
+
   function runGacha(count) {
     const cost = count === 10 ? 900 : 100;
     if (state.player.coin < cost) {
@@ -261,8 +281,9 @@ export default function App() {
       return;
     }
     const results = Array.from({ length: count }, rollOne);
+    clearGachaTimers();
     setGachaResults([]);
-    setGachaEffect({ active: true, items: results });
+    setGachaEffect({ active: true, items: results, index: 0 });
     updateState((current) => ({
       ...current,
       player: { ...current.player, coin: current.player.coin - cost },
@@ -273,11 +294,19 @@ export default function App() {
       gachaHistory: [...results, ...current.gachaHistory].slice(0, 40),
     }));
     setSparkle(true);
-    window.setTimeout(() => {
-      setGachaEffect({ active: false, items: [] });
-      setGachaResults(results);
-      setSparkle(false);
-    }, 1550);
+    const stepMs = count === 10 ? 760 : 1280;
+    gachaTimersRef.current = results.map((_, index) => window.setTimeout(() => {
+      setGachaEffect((current) => (current.active ? { ...current, index } : current));
+    }, index * stepMs));
+    gachaTimersRef.current.push(window.setTimeout(() => finishGacha(results), results.length * stepMs + 950));
+  }
+
+  function equipOutfit(item) {
+    updateState((current) => ({
+      ...current,
+      avatar: { ...current.avatar, outfit: item.id },
+    }));
+    setToast(`${item.name}に着替えたよ`);
   }
 
   function buyFurniture(item) {
@@ -519,7 +548,8 @@ export default function App() {
           )}
           {tab === "town" && <TownScreen state={state} townStage={townStage} placeFurniture={placeFurniture} />}
           {tab === "encyclopedia" && <EncyclopediaScreen state={state} />}
-          {tab === "gacha" && <GachaScreen state={state} runGacha={runGacha} gachaResults={gachaResults} gachaEffect={gachaEffect} />}
+          {tab === "gacha" && <GachaScreen state={state} runGacha={runGacha} gachaResults={gachaResults} gachaEffect={gachaEffect} onSkipGacha={skipGachaEffect} />}
+          {tab === "wardrobe" && <WardrobeScreen state={state} equipOutfit={equipOutfit} />}
           {tab === "shop" && <ShopScreen state={state} buyFurniture={buyFurniture} />}
           {tab === "settings" && <SettingsScreen state={state} updateState={updateState} resetGame={resetGame} />}
         </section>
@@ -655,7 +685,7 @@ function TopBar({ state, xpProgress, setTab, onAvatarEdit }) {
         <Badge icon="coin" value={state.player.coin.toLocaleString()} />
         <Badge icon="gem" value={state.player.gems.toLocaleString()} />
         <button className="icon-button" type="button" aria-label="お知らせ"><img src={asset("top-mail.png")} alt="" /></button>
-        <button className="icon-button has-dot" type="button" aria-label="ごほうび" onClick={() => setTab("gacha")}><img src={asset("top-gift.png")} alt="" /></button>
+        <button className="icon-button wardrobe-button" type="button" aria-label="お着替えルーム" onClick={() => setTab("wardrobe")}><img src={asset("outfit-sr-1.png")} alt="" /></button>
         <button className="icon-button" type="button" aria-label="設定" onClick={() => setTab("settings")}><img src={asset("top-gear.png")} alt="" /></button>
       </div>
     </header>
@@ -691,6 +721,7 @@ function HomeScreen({
   setDialogueOpen,
   setRoomOpen,
 }) {
+  const [leefelTipOpen, setLeefelTipOpen] = useState(false);
   const daily = activeQuests.slice(0, 3);
   const recovery = activeQuests.find((quest) => quest.type === "recovery");
   const weekGoalMinutes = 420;
@@ -699,6 +730,11 @@ function HomeScreen({
   const shownProgress = progressMode === "test" ? testProgress : weekProgress;
   const shownValue = progressMode === "test" ? `${state.settings.workDonePages} / ${state.settings.workTotalPages}` : `${totalStudyMinutes} / ${weekGoalMinutes}分`;
   const shownLabel = progressMode === "test" ? "テストまでの進捗" : "今週の進捗";
+  useEffect(() => {
+    if (!leefelTipOpen) return undefined;
+    const timerId = window.setTimeout(() => setLeefelTipOpen(false), 4200);
+    return () => window.clearTimeout(timerId);
+  }, [leefelTipOpen]);
   return (
     <div className="home-scene">
       <img src={asset("home-bg.png")} alt="" className="home-bg" />
@@ -754,8 +790,8 @@ function HomeScreen({
       </aside>
       <div className="hero-stage">
         <img src={asset("protagonist.png")} alt="主人公" className="protagonist" />
-        <button type="button" className="leefel-button" onClick={() => setDialogueOpen(true)} aria-label="リーフェルに話しかける">
-          <span className="speech">今日もがんばったね！<br />一緒に町を育てていこう♪</span>
+        <button type="button" className="leefel-button" onClick={() => setLeefelTipOpen((open) => !open)} onDoubleClick={() => setDialogueOpen(true)} aria-label="リーフェルに話しかける">
+          <span className={`speech ${leefelTipOpen ? "is-visible" : ""}`}>今日もがんばったね！<br />一緒に町を育てていこう♪</span>
           <img src={asset("leefel.png")} alt="リーフェル" className="leefel" />
         </button>
       </div>
@@ -841,7 +877,7 @@ function EncyclopediaScreen({ state }) {
   );
 }
 
-function GachaScreen({ state, runGacha, gachaResults, gachaEffect }) {
+function GachaScreen({ state, runGacha, gachaResults, gachaEffect, onSkipGacha }) {
   return (
     <div className="gacha-screen">
       <img src={asset("gacha-bg.png")} alt="" className="gacha-bg" />
@@ -851,8 +887,46 @@ function GachaScreen({ state, runGacha, gachaResults, gachaEffect }) {
         <p>衣装・髪型・アクセサリーだけが出るよ。精霊は町づくりで自然に遊びに来ます。</p>
         <div className="button-row"><button className="primary-button" onClick={() => runGacha(1)} disabled={gachaEffect.active}>1回 100</button><button className="primary-button pink" onClick={() => runGacha(10)} disabled={gachaEffect.active}>10回 900</button></div>
       </Panel>
-      {gachaEffect.active && <GachaEffect items={gachaEffect.items} />}
+      {gachaEffect.active && <GachaEffect items={gachaEffect.items} index={gachaEffect.index} onSkip={onSkipGacha} />}
       <div className="gacha-results">{gachaResults.map((item, index) => <RewardCard key={`${item.id}-${index}`} item={item} index={index} />)}</div>
+    </div>
+  );
+}
+
+function WardrobeScreen({ state, equipOutfit }) {
+  const ownedItems = gachaPool.filter((item) => state.inventory.outfits.includes(item.id));
+  const activeOutfit = state.avatar?.outfit || ownedItems[0]?.id;
+  const activeItem = gachaPool.find((item) => item.id === activeOutfit) || ownedItems[0];
+  return (
+    <div className="content-grid two-col wardrobe-screen">
+      <Panel className="wardrobe-preview-panel">
+        <p className="eyebrow">お着替えルーム</p>
+        <h2>今日のコーデ</h2>
+        <div className="wardrobe-preview">
+          <img src={asset("protagonist.png")} alt="" className="wardrobe-protagonist" />
+          {activeItem && (
+            <div className="wardrobe-current">
+              <img src={asset(activeItem.icon)} alt="" />
+              <span>{activeItem.rarity}</span>
+              <strong>{activeItem.name}</strong>
+            </div>
+          )}
+        </div>
+      </Panel>
+      <Panel className="wardrobe-list-panel">
+        <div className="panel-head"><h2>持っている衣装</h2><span>{ownedItems.length}点</span></div>
+        <div className="wardrobe-grid">
+          {ownedItems.map((item) => (
+            <article className={`wardrobe-card rarity-${item.rarity.toLowerCase()} ${item.id === activeOutfit ? "active" : ""}`} key={item.id}>
+              <img src={asset(item.icon)} alt="" />
+              <span>{item.rarity}</span>
+              <strong>{item.name}</strong>
+              <small>{item.type}</small>
+              <button type="button" onClick={() => equipOutfit(item)}>{item.id === activeOutfit ? "着用中" : "着る"}</button>
+            </article>
+          ))}
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -1060,8 +1134,8 @@ function Progress({ value }) {
   return <div className="progress"><span style={{ width: `${clampPercent(value)}%` }} /></div>;
 }
 
-function GachaEffect({ items }) {
-  const featured = items.find((item) => item.rarity === "SR") || items.find((item) => item.rarity === "R") || items[0];
+function GachaEffect({ items, index, onSkip }) {
+  const current = items[index] || items[0];
   return (
     <div className="gacha-effect" aria-live="polite">
       <div className="closet-aura">
@@ -1069,7 +1143,22 @@ function GachaEffect({ items }) {
         <span />
         <span />
       </div>
-      {featured && <img src={asset(featured.icon)} alt="" className="gacha-effect-item" />}
+      <button className="gacha-skip" type="button" onClick={onSkip}>スキップ</button>
+      {current && (
+        <article className={`gacha-effect-card rarity-${current.rarity.toLowerCase()}`} key={`${current.id}-${index}`}>
+          <img src={asset(current.icon)} alt="" className="gacha-effect-item" />
+          <span>{index + 1} / {items.length}</span>
+          <strong>{current.rarity} {current.name}</strong>
+          <small>{current.type}</small>
+        </article>
+      )}
+      <div className="gacha-reveal-strip">
+        {items.map((item, itemIndex) => (
+          <span key={`${item.id}-${itemIndex}`} className={itemIndex <= index ? `revealed rarity-${item.rarity.toLowerCase()}` : ""}>
+            {itemIndex <= index && <img src={asset(item.icon)} alt="" />}
+          </span>
+        ))}
+      </div>
       <p>森のクローゼットがひらいたよ</p>
     </div>
   );
